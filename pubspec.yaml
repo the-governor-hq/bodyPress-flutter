@@ -50,6 +50,7 @@ dependencies:
 
   # UI/Styling
   google_fonts: ^6.2.1
+  intl: ^0.19.0
   http: ^1.2.2
 
 dev_dependencies:

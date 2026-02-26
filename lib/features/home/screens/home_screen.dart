@@ -199,7 +199,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('BodyPress'),
+        title: const Text('Debug Panel'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.go('/'),
+        ),
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
         ],
