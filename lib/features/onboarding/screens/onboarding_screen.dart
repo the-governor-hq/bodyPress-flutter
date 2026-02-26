@@ -61,7 +61,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     }
   }
 
-  void _finish() => context.go('/');
+  void _finish() => context.go('/journal');
 
   // ── permission helpers ────────────────────────────────────────
 

@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../features/body_blog/screens/body_blog_screen.dart';
-import '../../features/environment/screens/environment_screen.dart';
+import '../../features/capture/screens/capture_screen.dart';
 import '../../features/home/screens/home_screen.dart';
+import '../../features/journal/screens/journal_screen.dart';
 import '../../features/onboarding/screens/onboarding_screen.dart';
+import '../../features/patterns/screens/patterns_screen.dart';
+import '../../features/shell/app_shell.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
-    initialLocation: '/onboarding',
+    initialLocation: '/journal',
     routes: [
+      // ── Onboarding (no bottom nav) ──────────────────────────────────
       GoRoute(
         path: '/onboarding',
         name: 'onboarding',
@@ -20,27 +23,54 @@ class AppRouter {
               FadeTransition(opacity: animation, child: child),
         ),
       ),
-      GoRoute(
-        path: '/',
-        name: 'blog',
-        pageBuilder: (context, state) => CustomTransitionPage(
-          key: state.pageKey,
-          child: const BodyBlogScreen(),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) =>
-              FadeTransition(opacity: animation, child: child),
-        ),
+
+      // ── Main shell with bottom navigation (3 tabs) ─────────────────
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) =>
+            AppShell(navigationShell: navigationShell),
+        branches: [
+          // Tab 0 — Journal (default)
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/journal',
+                name: 'journal',
+                pageBuilder: (context, state) =>
+                    const NoTransitionPage(child: JournalScreen()),
+              ),
+            ],
+          ),
+          // Tab 1 — Patterns
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/patterns',
+                name: 'patterns',
+                pageBuilder: (context, state) =>
+                    const NoTransitionPage(child: PatternsScreen()),
+              ),
+            ],
+          ),
+          // Tab 2 — Capture
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/capture',
+                name: 'capture',
+                pageBuilder: (context, state) =>
+                    const NoTransitionPage(child: CaptureScreen()),
+              ),
+            ],
+          ),
+        ],
       ),
+
+      // ── Standalone routes (no bottom nav) ───────────────────────────
       GoRoute(
         path: '/debug',
         name: 'debug',
         pageBuilder: (context, state) =>
             MaterialPage(key: state.pageKey, child: const HomeScreen()),
-      ),
-      GoRoute(
-        path: '/environment',
-        name: 'environment',
-        pageBuilder: (context, state) =>
-            MaterialPage(key: state.pageKey, child: const EnvironmentScreen()),
       ),
     ],
   );

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/services/permission_service.dart';
+
 import '../../../core/services/health_service.dart';
+import '../../../core/services/permission_service.dart';
 
 class PermissionsScreen extends StatefulWidget {
   const PermissionsScreen({super.key});
@@ -48,7 +49,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
           return {};
         },
       );
-      
+
       // Request health permissions with timeout
       await _healthService.requestAuthorization().timeout(
         const Duration(seconds: 10),
@@ -60,7 +61,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
 
       // Navigate to home screen
       if (mounted) {
-        context.go('/');
+        context.go('/journal');
       }
     } catch (e) {
       print('Error requesting permissions: $e');
@@ -89,22 +90,22 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
               Text(
                 'Welcome to',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w300,
-                    ),
+                  fontWeight: FontWeight.w300,
+                ),
               ),
               Text(
                 'BodyPress',
                 style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
               ),
               const SizedBox(height: 16),
               Text(
                 'We need a few permissions to provide you with the best experience',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Colors.grey,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyLarge?.copyWith(color: Colors.grey),
               ),
               const SizedBox(height: 48),
               Expanded(
@@ -138,9 +139,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                           ),
                           subtitle: Text(
                             permission.description,
-                            style: TextStyle(
-                              color: Colors.grey[600],
-                            ),
+                            style: TextStyle(color: Colors.grey[600]),
                           ),
                         ),
                       ),
@@ -158,7 +157,9 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                           width: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
                           ),
                         )
                       : const Text('Grant Permissions'),

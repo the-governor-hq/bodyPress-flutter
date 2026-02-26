@@ -202,7 +202,7 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('Debug Panel'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/'),
+          onPressed: () => context.go('/journal'),
         ),
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
