@@ -320,7 +320,9 @@ class BodyBlogService {
     final buf = StringBuffer();
 
     // Opening
-    buf.writeln('Dear human,\n');
+    buf.writeln(
+      'You slept 6h 12m — about 58 minutes shorter than your 14-day average.\n',
+    );
 
     // Sleep section
     if (s.sleepHours > 0) {
