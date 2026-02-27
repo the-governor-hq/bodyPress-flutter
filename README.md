@@ -228,4 +228,4 @@ All data fetches have 5–15 s timeouts to prevent UI freezes.
 
 ## License
 
-Private — all rights reserved.
+MIT
