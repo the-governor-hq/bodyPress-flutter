@@ -807,7 +807,9 @@ class _DebugScreenState extends State<DebugScreen> {
                         row['date'] as String? ?? '—',
                         style: mono.copyWith(
                           fontWeight: FontWeight.w700,
-                          color: dark ? Colors.white70 : Colors.black70,
+                          color: dark
+                              ? Colors.white70
+                              : Colors.black.withOpacity(0.7),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -820,7 +822,9 @@ class _DebugScreenState extends State<DebugScreen> {
                         Icon(
                           Icons.edit_note,
                           size: 13,
-                          color: dark ? Colors.white30 : Colors.black30,
+                          color: dark
+                              ? Colors.white30
+                              : Colors.black.withOpacity(0.3),
                         ),
                     ],
                   ),
@@ -1030,7 +1034,7 @@ class _DebugScreenState extends State<DebugScreen> {
               style: GoogleFonts.spaceMono(
                 fontSize: 10.5,
                 height: 1.6,
-                color: dark ? Colors.white70 : Colors.black70,
+                color: dark ? Colors.white70 : Colors.black.withOpacity(0.7),
               ),
             ),
           ),
@@ -1144,7 +1148,9 @@ class _DebugScreenState extends State<DebugScreen> {
                     Icon(
                       Icons.sticky_note_2_outlined,
                       size: 11,
-                      color: dark ? Colors.white30 : Colors.black30,
+                      color: dark
+                          ? Colors.white30
+                          : Colors.black.withOpacity(0.3),
                     ),
                     const SizedBox(width: 4),
                     Expanded(
@@ -1179,7 +1185,7 @@ class _DebugScreenState extends State<DebugScreen> {
         children: [
           _actionButton(
             label: 'Force refresh today\'s entry',
-            icon: Icons.auto_renew_outlined,
+            icon: Icons.autorenew,
             color: Colors.teal,
             onTap: _actionRunning ? null : _forceRefreshEntry,
           ),

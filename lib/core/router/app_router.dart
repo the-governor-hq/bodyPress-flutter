@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/capture/screens/capture_screen.dart';
+import '../../features/environment/screens/environment_screen.dart';
 import '../../features/journal/screens/journal_screen.dart';
 import '../../features/onboarding/screens/onboarding_screen.dart';
 import '../../features/patterns/screens/patterns_screen.dart';
@@ -66,6 +67,28 @@ class AppRouter {
       ),
 
       // ── Standalone routes (no bottom nav) ───────────────────────────
+      GoRoute(
+        path: '/environment',
+        name: 'environment',
+        pageBuilder: (context, state) => CustomTransitionPage(
+          key: state.pageKey,
+          child: const EnvironmentScreen(),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+              SlideTransition(
+                position:
+                    Tween<Offset>(
+                      begin: const Offset(1, 0),
+                      end: Offset.zero,
+                    ).animate(
+                      CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOutCubic,
+                      ),
+                    ),
+                child: child,
+              ),
+        ),
+      ),
       GoRoute(
         path: '/debug',
         name: 'debug',
