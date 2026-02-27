@@ -7,7 +7,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../core/models/ai_models.dart';
 import '../../core/models/body_blog_entry.dart';
+import '../../core/services/ai_service.dart';
 import '../../core/services/body_blog_service.dart';
 import '../../core/services/context_window_service.dart';
 import '../../core/services/health_service.dart';
@@ -33,6 +35,7 @@ class _DebugScreenState extends State<DebugScreen> {
   final _permissions = PermissionService();
   final _context = ContextWindowService();
   final _blog = BodyBlogService();
+  final _ai = AiService();
 
   // ── state ──────────────────────────────────────────────
   bool _loading = true;
@@ -60,11 +63,17 @@ class _DebugScreenState extends State<DebugScreen> {
   // Recent entries
   List<BodyBlogEntry> _recentEntries = [];
 
+  // AI service
+  bool? _aiHealthy;
+  String? _aiTestResponse;
+  bool _aiTestRunning = false;
+
   // Errors per section
   String? _permError;
   String? _dbError;
   String? _healthError;
   String? _contextError;
+  String? _aiError;
 
   // Action state
   bool _actionRunning = false;
@@ -89,6 +98,7 @@ class _DebugScreenState extends State<DebugScreen> {
       _loadDb(),
       _loadHealth(),
       _loadContext(),
+      _loadAi(),
     ]);
     if (mounted) setState(() => _loading = false);
   }
@@ -209,6 +219,19 @@ class _DebugScreenState extends State<DebugScreen> {
     }
   }
 
+  Future<void> _loadAi() async {
+    try {
+      setState(() => _aiError = null);
+      _aiHealthy = await _ai.checkHealth();
+      if (mounted) setState(() {});
+    } catch (e) {
+      setState(() {
+        _aiHealthy = false;
+        _aiError = e.toString();
+      });
+    }
+  }
+
   // ── actions ───────────────────────────────────────────
 
   Future<void> _requestAllPermissions() async {
@@ -287,6 +310,35 @@ class _DebugScreenState extends State<DebugScreen> {
   Future<void> _copyContext() async {
     await Clipboard.setData(ClipboardData(text: _contextText));
     _setActionMsg('Context window copied to clipboard.');
+  }
+
+  Future<void> _runAiTest() async {
+    setState(() {
+      _aiTestRunning = true;
+      _aiTestResponse = null;
+    });
+    try {
+      final response = await _ai.ask(
+        'Respond with exactly one encouraging sentence about fitness.',
+        temperature: 0.7,
+      );
+      setState(() {
+        _aiTestResponse = response;
+        _actionMessage = 'AI test completed';
+      });
+    } on AiServiceException catch (e) {
+      setState(() {
+        _aiTestResponse = 'Error: ${e.message}';
+        _aiError = e.toString();
+      });
+    } catch (e) {
+      setState(() {
+        _aiTestResponse = 'Unexpected error: $e';
+        _aiError = e.toString();
+      });
+    } finally {
+      setState(() => _aiTestRunning = false);
+    }
   }
 
   void _setActionMsg(String msg) {
@@ -387,6 +439,25 @@ class _DebugScreenState extends State<DebugScreen> {
                                   : Colors.red,
                               errorText: _healthError,
                               child: _buildHealthContent(dark),
+                            ),
+                            const SizedBox(height: 10),
+                            // ── ai service
+                            _buildSection(
+                              key: 'ai',
+                              title: 'AI Service',
+                              icon: Icons.smart_toy_outlined,
+                              accent: Colors.indigo,
+                              dark: dark,
+                              surface: surface,
+                              dividerColor: dividerColor,
+                              badge: _aiHealthy == null
+                                  ? 'checking'
+                                  : (_aiHealthy! ? 'online' : 'offline'),
+                              badgeColor: _aiHealthy == null
+                                  ? Colors.grey
+                                  : (_aiHealthy! ? Colors.green : Colors.red),
+                              errorText: _aiError,
+                              child: _buildAiContent(dark),
                             ),
                             const SizedBox(height: 10),
                             // ── context window
@@ -986,6 +1057,129 @@ class _DebugScreenState extends State<DebugScreen> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────── AI SERVICE ───────────────────────
+
+  Widget _buildAiContent(bool dark) {
+    final mono = GoogleFonts.spaceMono(
+      fontSize: 11,
+      color: dark ? Colors.white60 : Colors.black54,
+    );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Status row
+          Row(
+            children: [
+              Icon(
+                _aiHealthy == true ? Icons.check_circle : Icons.error_outline,
+                size: 16,
+                color: _aiHealthy == true ? Colors.green : Colors.red,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _aiHealthy == true
+                    ? 'AI service is online and responding'
+                    : 'AI service is not available',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: dark ? Colors.white70 : Colors.black.withOpacity(0.7),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Endpoint info
+          Text(
+            'ENDPOINT',
+            style: GoogleFonts.spaceMono(
+              fontSize: 9,
+              color: dark ? Colors.white38 : Colors.black38,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 2),
+          SelectableText('https://ai.governor-hq.com', style: mono),
+          const SizedBox(height: 16),
+          // Test button
+          _actionButton(
+            label: 'Send test prompt',
+            icon: Icons.send_outlined,
+            color: Colors.indigo,
+            onTap: (_aiHealthy != true || _aiTestRunning) ? null : _runAiTest,
+          ),
+          if (_aiTestRunning) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 1.5),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Waiting for AI response...',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: dark ? Colors.white38 : Colors.black38,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (_aiTestResponse != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: dark
+                    ? Colors.indigo.withValues(alpha: 0.1)
+                    : Colors.indigo.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.indigo.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.smart_toy,
+                        size: 13,
+                        color: Colors.indigo,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'AI Response',
+                        style: GoogleFonts.spaceMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.indigo,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SelectableText(
+                    _aiTestResponse!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.5,
+                      color: dark ? Colors.white70 : Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
