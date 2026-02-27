@@ -1060,7 +1060,10 @@ class _BlogDetailPageState extends State<_BlogDetailPage> {
         );
       },
     );
-    controller.dispose();
+    // Defer dispose until after the sheet's close animation finishes.
+    // Disposing immediately causes "used after dispose" errors because
+    // Flutter may still rebuild the TextField during the exit animation.
+    Future.delayed(const Duration(milliseconds: 400), controller.dispose);
   }
 
   @override
