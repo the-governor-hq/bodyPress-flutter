@@ -4,6 +4,7 @@ import '../models/body_blog_entry.dart';
 import 'ambient_scan_service.dart';
 import 'calendar_service.dart';
 import 'health_service.dart';
+import 'local_db_service.dart';
 import 'location_service.dart';
 
 /// Service that collects real device data and generates a daily body-blog
@@ -17,32 +18,48 @@ class BodyBlogService {
   final LocationService _location = LocationService();
   final CalendarService _calendar = CalendarService();
   final AmbientScanService _ambient = AmbientScanService();
+  final LocalDbService _db = LocalDbService();
 
   // ── public API ──────────────────────────────────────────────────
 
-  /// Build today's blog entry from live device data.
+  /// Build today's blog entry from live device data and persist it.
   Future<BodyBlogEntry> getTodayEntry() async {
     final snapshot = await _collectSnapshot();
-    return _compose(DateTime.now(), snapshot);
+    final entry = _compose(DateTime.now(), snapshot);
+    // Preserve any existing user note when refreshing today's entry.
+    final existing = await _db.loadEntry(entry.date);
+    final toSave = existing?.userNote != null
+        ? entry.copyWith(userNote: existing!.userNote)
+        : entry;
+    await _db.saveEntry(toSave);
+    return toSave;
   }
 
   /// Build entries for the last [days] days.
-  /// Only today has real data; past days get skeleton entries.
+  /// Today is always re-fetched from sensors; past days are loaded from the
+  /// local DB and fall back to a skeleton entry when not yet persisted.
   Future<List<BodyBlogEntry>> getRecentEntries({int days = 7}) async {
     final today = DateTime.now();
     final entries = <BodyBlogEntry>[];
 
-    // Today – live data
-    final todaySnap = await _collectSnapshot();
-    entries.add(_compose(today, todaySnap));
+    // Today – live data (also persists)
+    entries.add(await getTodayEntry());
 
-    // Previous days – placeholder structure (real persistence comes later)
+    // Previous days – load from DB or fall back to empty skeleton
     for (var i = 1; i < days; i++) {
       final date = today.subtract(Duration(days: i));
-      entries.add(_composeEmpty(date));
+      final stored = await _db.loadEntry(date);
+      entries.add(stored ?? _composeEmpty(date));
     }
 
     return entries;
+  }
+
+  /// Persist or clear a user-written note for [date].
+  /// Returns the updated entry, or `null` when the entry is not in the DB
+  /// (e.g. the date was never fetched).
+  Future<BodyBlogEntry?> saveUserNote(DateTime date, String? note) {
+    return _db.updateUserNote(date, note);
   }
 
   // ── data collection ─────────────────────────────────────────────

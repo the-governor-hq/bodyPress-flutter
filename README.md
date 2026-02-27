@@ -31,7 +31,8 @@ lib/
 │   ├── router/
 │   │   └── app_router.dart           # GoRouter config
 │   ├── services/
-│   │   ├── body_blog_service.dart    # Data collection + narrative composition
+│   │   ├── body_blog_service.dart    # Data collection + narrative composition + DB integration
+│   │   ├── local_db_service.dart     # SQLite persistence (sqflite) — CRUD for BodyBlogEntry
 │   │   ├── health_service.dart       # HealthKit / Health Connect abstraction
 │   │   ├── location_service.dart     # Geolocator wrapper
 │   │   ├── ambient_scan_service.dart # Environment API client
@@ -70,6 +71,7 @@ lib/
 | HTTP             | `http`             | Ambient-scan API calls                     |
 | Typography       | `google_fonts`     | Inter (body), Playfair Display (headlines) |
 | Formatting       | `intl`             | Date formatting                            |
+| Persistence      | `sqflite` + `path` | SQLite local storage for daily entries     |
 
 ## Screens
 
@@ -105,9 +107,9 @@ This will be replaced by a classifier or LLM prompt once sufficient labelled dat
 ### Near-term
 
 - [ ] LLM-backed narrative generation (structured prompt with BodySnapshot as context)
-- [ ] Local persistence of daily entries (SQLite / Hive)
+- [x] Local persistence of daily entries (SQLite via sqflite)
 - [ ] 7-day rolling context window — AI reads the past week to detect trends
-- [ ] User annotations / steering — ability to add notes that the AI incorporates
+- [x] User annotations — free-text note per day, stored in SQLite, shown in journal detail
 
 ### Mid-term — BLE peripherals
 

@@ -53,6 +53,10 @@ dependencies:
   intl: ^0.19.0
   http: ^1.2.2
 
+  # Local persistence
+  sqflite: ^2.3.3
+  path: ^1.9.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

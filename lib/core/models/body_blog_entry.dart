@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// Data model for a single body-blog entry.
 ///
 /// Each entry represents one day's AI-generated narrative, written from
@@ -13,6 +15,9 @@ class BodyBlogEntry {
   final List<String> tags;
   final BodySnapshot snapshot;
 
+  /// Optional free-text note added manually by the user.
+  final String? userNote;
+
   const BodyBlogEntry({
     required this.date,
     required this.headline,
@@ -22,7 +27,67 @@ class BodyBlogEntry {
     required this.moodEmoji,
     required this.tags,
     required this.snapshot,
+    this.userNote,
   });
+
+  BodyBlogEntry copyWith({
+    DateTime? date,
+    String? headline,
+    String? summary,
+    String? fullBody,
+    String? mood,
+    String? moodEmoji,
+    List<String>? tags,
+    BodySnapshot? snapshot,
+    String? userNote,
+    bool clearUserNote = false,
+  }) {
+    return BodyBlogEntry(
+      date: date ?? this.date,
+      headline: headline ?? this.headline,
+      summary: summary ?? this.summary,
+      fullBody: fullBody ?? this.fullBody,
+      mood: mood ?? this.mood,
+      moodEmoji: moodEmoji ?? this.moodEmoji,
+      tags: tags ?? this.tags,
+      snapshot: snapshot ?? this.snapshot,
+      userNote: clearUserNote ? null : (userNote ?? this.userNote),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'date': date.toIso8601String(),
+    'headline': headline,
+    'summary': summary,
+    'full_body': fullBody,
+    'mood': mood,
+    'mood_emoji': moodEmoji,
+    'tags': jsonEncode(tags),
+    'user_note': userNote,
+    'snapshot': jsonEncode(snapshot.toJson()),
+  };
+
+  factory BodyBlogEntry.fromJson(Map<String, dynamic> json) {
+    final tagsRaw = json['tags'] as String?;
+    final snapshotRaw = json['snapshot'] as String?;
+    return BodyBlogEntry(
+      date: DateTime.parse(json['date'] as String),
+      headline: json['headline'] as String,
+      summary: json['summary'] as String,
+      fullBody: json['full_body'] as String,
+      mood: json['mood'] as String,
+      moodEmoji: json['mood_emoji'] as String,
+      tags: tagsRaw != null
+          ? (jsonDecode(tagsRaw) as List).cast<String>()
+          : const [],
+      userNote: json['user_note'] as String?,
+      snapshot: snapshotRaw != null
+          ? BodySnapshot.fromJson(
+              jsonDecode(snapshotRaw) as Map<String, dynamic>,
+            )
+          : const BodySnapshot(),
+    );
+  }
 }
 
 /// Raw data snapshot collected for a given day.
@@ -54,4 +119,39 @@ class BodySnapshot {
     this.city,
     this.calendarEvents = const [],
   });
+
+  Map<String, dynamic> toJson() => {
+    'steps': steps,
+    'calories_burned': caloriesBurned,
+    'distance_km': distanceKm,
+    'sleep_hours': sleepHours,
+    'avg_heart_rate': avgHeartRate,
+    'workouts': workouts,
+    'temperature_c': temperatureC,
+    'aqi_us': aqiUs,
+    'uv_index': uvIndex,
+    'weather_desc': weatherDesc,
+    'city': city,
+    'calendar_events': jsonEncode(calendarEvents),
+  };
+
+  factory BodySnapshot.fromJson(Map<String, dynamic> json) {
+    final eventsRaw = json['calendar_events'] as String?;
+    return BodySnapshot(
+      steps: (json['steps'] as num?)?.toInt() ?? 0,
+      caloriesBurned: (json['calories_burned'] as num?)?.toDouble() ?? 0,
+      distanceKm: (json['distance_km'] as num?)?.toDouble() ?? 0,
+      sleepHours: (json['sleep_hours'] as num?)?.toDouble() ?? 0,
+      avgHeartRate: (json['avg_heart_rate'] as num?)?.toInt() ?? 0,
+      workouts: (json['workouts'] as num?)?.toInt() ?? 0,
+      temperatureC: (json['temperature_c'] as num?)?.toDouble(),
+      aqiUs: (json['aqi_us'] as num?)?.toInt(),
+      uvIndex: (json['uv_index'] as num?)?.toDouble(),
+      weatherDesc: json['weather_desc'] as String?,
+      city: json['city'] as String?,
+      calendarEvents: eventsRaw != null
+          ? (jsonDecode(eventsRaw) as List).cast<String>()
+          : const [],
+    );
+  }
 }

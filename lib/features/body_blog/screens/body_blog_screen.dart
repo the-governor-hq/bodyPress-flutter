@@ -776,9 +776,156 @@ class _ZenLoaderState extends State<_ZenLoader>
 //  FULL JOURNAL DETAIL PAGE
 // ═════════════════════════════════════════════════════════════════════════════
 
-class _BlogDetailPage extends StatelessWidget {
+class _BlogDetailPage extends StatefulWidget {
   const _BlogDetailPage({required this.entry});
   final BodyBlogEntry entry;
+
+  @override
+  State<_BlogDetailPage> createState() => _BlogDetailPageState();
+}
+
+class _BlogDetailPageState extends State<_BlogDetailPage> {
+  late BodyBlogEntry _entry;
+  final BodyBlogService _blogService = BodyBlogService();
+
+  @override
+  void initState() {
+    super.initState();
+    _entry = widget.entry;
+  }
+
+  Future<void> _showNoteEditor() async {
+    final controller = TextEditingController(text: _entry.userNote ?? '');
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final primary = Theme.of(context).colorScheme.primary;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: dark ? const Color(0xFF1A1A1A) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 24,
+            right: 24,
+            top: 24,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    'Your note',
+                    style: GoogleFonts.playfairDisplay(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: dark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (_entry.userNote != null && _entry.userNote!.isNotEmpty)
+                    TextButton(
+                      onPressed: () async {
+                        Navigator.of(ctx).pop();
+                        final updated = await _blogService.saveUserNote(
+                          _entry.date,
+                          null,
+                        );
+                        if (updated != null && mounted) {
+                          setState(() => _entry = updated);
+                        }
+                      },
+                      child: Text(
+                        'Clear',
+                        style: GoogleFonts.inter(
+                          color: Colors.redAccent,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                maxLines: 6,
+                minLines: 3,
+                style: GoogleFonts.inter(
+                  fontSize: 15,
+                  height: 1.6,
+                  color: dark ? Colors.white70 : Colors.black87,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'How did today actually feel?',
+                  hintStyle: GoogleFonts.inter(
+                    color: dark ? Colors.white30 : Colors.black38,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: primary.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: dark
+                          ? Colors.white.withValues(alpha: 0.15)
+                          : Colors.black.withValues(alpha: 0.12),
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: primary, width: 1.5),
+                  ),
+                  contentPadding: const EdgeInsets.all(14),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () async {
+                    final note = controller.text.trim();
+                    Navigator.of(ctx).pop();
+                    final updated = await _blogService.saveUserNote(
+                      _entry.date,
+                      note.isEmpty ? null : note,
+                    );
+                    if (updated != null && mounted) {
+                      setState(() => _entry = updated);
+                    }
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: primary,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    'Save note',
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    controller.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -789,7 +936,7 @@ class _BlogDetailPage extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            // back button
+            // back button + date + note edit icon
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
               child: Row(
@@ -803,14 +950,27 @@ class _BlogDetailPage extends StatelessWidget {
                   ),
                   const Spacer(),
                   Text(
-                    DateFormat('MMMM d, y').format(entry.date),
+                    DateFormat('MMMM d, y').format(_entry.date),
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                       color: dark ? Colors.white38 : Colors.black38,
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    tooltip: _entry.userNote != null ? 'Edit note' : 'Add note',
+                    onPressed: _showNoteEditor,
+                    icon: Icon(
+                      _entry.userNote != null
+                          ? Icons.edit_note_rounded
+                          : Icons.add_comment_outlined,
+                      size: 20,
+                      color: _entry.userNote != null
+                          ? primary
+                          : (dark ? Colors.white38 : Colors.black38),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -827,7 +987,7 @@ class _BlogDetailPage extends StatelessWidget {
                   children: [
                     // headline
                     Text(
-                      entry.headline,
+                      _entry.headline,
                       style: GoogleFonts.playfairDisplay(
                         fontSize: 28,
                         fontWeight: FontWeight.w700,
@@ -841,12 +1001,12 @@ class _BlogDetailPage extends StatelessWidget {
                     Row(
                       children: [
                         Text(
-                          entry.moodEmoji,
+                          _entry.moodEmoji,
                           style: const TextStyle(fontSize: 18),
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          entry.mood,
+                          _entry.mood,
                           style: GoogleFonts.inter(
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
@@ -868,7 +1028,7 @@ class _BlogDetailPage extends StatelessWidget {
 
                     // full body
                     Text(
-                      entry.fullBody,
+                      _entry.fullBody,
                       style: GoogleFonts.inter(
                         fontSize: 15,
                         height: 1.85,
@@ -880,14 +1040,98 @@ class _BlogDetailPage extends StatelessWidget {
                     const SizedBox(height: 32),
 
                     // tags
-                    if (entry.tags.isNotEmpty)
+                    if (_entry.tags.isNotEmpty)
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children: entry.tags
+                        children: _entry.tags
                             .map((t) => _Tag(label: t))
                             .toList(),
                       ),
+
+                    // user note block
+                    if (_entry.userNote != null &&
+                        _entry.userNote!.isNotEmpty) ...[
+                      const SizedBox(height: 32),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: primary.withValues(alpha: dark ? 0.12 : 0.07),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border(
+                            left: BorderSide(color: primary, width: 3),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.edit_note_rounded,
+                                  size: 14,
+                                  color: primary.withValues(alpha: 0.7),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Your note',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.8,
+                                    color: primary.withValues(alpha: 0.7),
+                                  ),
+                                ),
+                                const Spacer(),
+                                GestureDetector(
+                                  onTap: _showNoteEditor,
+                                  child: Icon(
+                                    Icons.edit_outlined,
+                                    size: 14,
+                                    color: dark
+                                        ? Colors.white38
+                                        : Colors.black38,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              _entry.userNote!,
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                height: 1.65,
+                                fontStyle: FontStyle.italic,
+                                color: dark ? Colors.white70 : Colors.black54,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else ...[
+                      const SizedBox(height: 32),
+                      GestureDetector(
+                        onTap: _showNoteEditor,
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.add_comment_outlined,
+                              size: 16,
+                              color: dark ? Colors.white24 : Colors.black26,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Add a note about today',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                color: dark ? Colors.white24 : Colors.black26,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
 
                     const SizedBox(height: 48),
                   ],
