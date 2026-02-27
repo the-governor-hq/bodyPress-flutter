@@ -184,6 +184,37 @@ flutter analyze
 flutter test
 ```
 
+## After building new features
+
+Run these commands before committing any new feature:
+
+```bash
+# 1. Resolve any new packages or updated pubspec.yaml
+flutter pub get
+
+# 2. Re-generate any code-gen outputs (if applicable in future)
+# dart run build_runner build --delete-conflicting-outputs
+
+# 3. Static analysis — must pass with zero errors
+flutter analyze
+
+# 4. Run the test suite
+flutter test
+
+# 5. Quick smoke-test on a connected device or emulator
+flutter run -d <device-id>
+```
+
+### Checklist
+
+- [ ] `flutter pub get` — no unresolved dependencies
+- [ ] `flutter analyze` — 0 errors, 0 warnings
+- [ ] `flutter test` — all tests pass
+- [ ] New screen wired in `app_router.dart`
+- [ ] Architecture table in README updated (new service / screen rows)
+- [ ] Roadmap checkbox ticked if feature was planned
+- [ ] Dart formatter applied (`dart format lib/`)
+
 ## Testing notes
 
 The app displays only real sensor data. On emulators without Health Connect or HealthKit, health values will be zero. This is correct behaviour — see `CODING_PRINCIPLES.md`.

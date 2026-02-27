@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/capture/screens/capture_screen.dart';
-import '../../features/home/screens/home_screen.dart';
 import '../../features/journal/screens/journal_screen.dart';
 import '../../features/onboarding/screens/onboarding_screen.dart';
 import '../../features/patterns/screens/patterns_screen.dart';
 import '../../features/shell/app_shell.dart';
+import '../../features/shell/debug_screen.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -69,8 +69,24 @@ class AppRouter {
       GoRoute(
         path: '/debug',
         name: 'debug',
-        pageBuilder: (context, state) =>
-            MaterialPage(key: state.pageKey, child: const HomeScreen()),
+        pageBuilder: (context, state) => CustomTransitionPage(
+          key: state.pageKey,
+          child: const DebugScreen(),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+              SlideTransition(
+                position:
+                    Tween<Offset>(
+                      begin: const Offset(0, 1),
+                      end: Offset.zero,
+                    ).animate(
+                      CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOutCubic,
+                      ),
+                    ),
+                child: child,
+              ),
+        ),
       ),
     ],
   );
