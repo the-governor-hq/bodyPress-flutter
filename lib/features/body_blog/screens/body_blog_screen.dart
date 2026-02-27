@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/models/body_blog_entry.dart';
 import '../../../core/services/body_blog_service.dart';
+import '../../../core/theme/theme_provider.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Body Blog — Medium-inspired, Zen home screen
@@ -180,15 +182,45 @@ class _BodyBlogScreenState extends State<BodyBlogScreen> {
 //  TOP BAR
 // ═════════════════════════════════════════════════════════════════════════════
 
-class _TopBar extends StatelessWidget {
+class _TopBar extends ConsumerWidget {
   const _TopBar({required this.onDebug, required this.onRefresh});
 
   final VoidCallback onDebug;
   final VoidCallback onRefresh;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final dark = Theme.of(context).brightness == Brightness.dark;
+    final themeMode = ref.watch(themeModeProvider);
+
+    void toggleTheme() {
+      // Cycle: system → dark → light → system
+      final next = switch (themeMode) {
+        ThemeMode.system => ThemeMode.dark,
+        ThemeMode.dark => ThemeMode.light,
+        ThemeMode.light => ThemeMode.system,
+      };
+      ref.read(themeModeProvider.notifier).state = next;
+    }
+
+    IconData themeIcon;
+    String themeTooltip;
+    switch (themeMode) {
+      case ThemeMode.dark:
+        themeIcon = Icons.dark_mode_outlined;
+        themeTooltip = 'Dark mode (tap for light)';
+        break;
+      case ThemeMode.light:
+        themeIcon = Icons.light_mode_outlined;
+        themeTooltip = 'Light mode (tap for system)';
+        break;
+      case ThemeMode.system:
+      default:
+        themeIcon = dark ? Icons.brightness_auto : Icons.brightness_auto;
+        themeTooltip = 'System theme (tap for dark)';
+        break;
+    }
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 12, 16, 0),
       child: Row(
@@ -202,6 +234,15 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           const Spacer(),
+          IconButton(
+            onPressed: toggleTheme,
+            icon: Icon(
+              themeIcon,
+              color: dark ? Colors.white38 : Colors.black26,
+              size: 22,
+            ),
+            tooltip: themeTooltip,
+          ),
           IconButton(
             onPressed: onRefresh,
             icon: Icon(
