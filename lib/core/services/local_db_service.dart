@@ -27,7 +27,8 @@ class DbInfo {
 class LocalDbService {
   static const _dbName = 'bodypress.db';
   static const _tableEntries = 'entries';
-  static const _schemaVersion = 1;
+  static const _tableSettings = 'settings';
+  static const _schemaVersion = 2;
 
   Database? _db;
 
@@ -65,10 +66,24 @@ class LocalDbService {
         snapshot   TEXT    NOT NULL DEFAULT '{}'
       )
     ''');
+    await db.execute('''
+      CREATE TABLE $_tableSettings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Future migrations go here following ALTER TABLE / new table patterns.
+    if (oldVersion < 2) {
+      // v1 → v2: add settings table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $_tableSettings (
+          key   TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        )
+      ''');
+    }
   }
 
   Future<void> close() async {
@@ -226,6 +241,32 @@ class LocalDbService {
       newestDate: newest,
     );
   }
+
+  // ── settings ──────────────────────────────────────────────────────────────
+
+  /// Persist an app-level setting.
+  Future<void> setSetting(String key, String value) async {
+    final db = await _database;
+    await db.insert(_tableSettings, {
+      'key': key,
+      'value': value,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Retrieve a previously persisted setting, or `null` if not set.
+  Future<String?> getSetting(String key) async {
+    final db = await _database;
+    final rows = await db.query(
+      _tableSettings,
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first['value'] as String?;
+  }
+
+  // ── debug ─────────────────────────────────────────────────────────────────
 
   /// Raw rows for the debug inspector — returns lightweight maps
   /// (excludes the large full_body and snapshot JSON columns).

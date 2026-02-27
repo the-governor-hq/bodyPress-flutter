@@ -200,7 +200,7 @@ class _TopBar extends ConsumerWidget {
         ThemeMode.dark => ThemeMode.light,
         ThemeMode.light => ThemeMode.system,
       };
-      ref.read(themeModeProvider.notifier).state = next;
+      ref.read(themeModeProvider.notifier).setThemeMode(next);
     }
 
     IconData themeIcon;
