@@ -2,6 +2,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../models/body_blog_entry.dart';
+import '../models/capture_entry.dart';
 
 /// Snapshot of database metadata for the debug panel.
 class DbInfo {
@@ -20,15 +21,17 @@ class DbInfo {
   });
 }
 
-/// SQLite persistence layer for [BodyBlogEntry] records.
+/// SQLite persistence layer for [BodyBlogEntry] and [CaptureEntry] records.
 ///
-/// One row per calendar day (PK = ISO date string "yyyy-MM-dd").
+/// One row per calendar day (PK = ISO date string "yyyy-MM-dd") for body blog entries.
+/// One row per capture (PK = capture ID) for captures.
 /// Callers never interact with raw SQL — use the typed helpers below.
 class LocalDbService {
   static const _dbName = 'bodypress.db';
   static const _tableEntries = 'entries';
   static const _tableSettings = 'settings';
-  static const _schemaVersion = 3;
+  static const _tableCaptures = 'captures';
+  static const _schemaVersion = 4;
 
   Database? _db;
 
@@ -73,6 +76,28 @@ class LocalDbService {
         value TEXT NOT NULL
       )
     ''');
+    await db.execute('''
+      CREATE TABLE $_tableCaptures (
+        id               TEXT    PRIMARY KEY,
+        timestamp        TEXT    NOT NULL,
+        is_processed     INTEGER NOT NULL DEFAULT 0,
+        user_note        TEXT,
+        user_mood        TEXT,
+        tags             TEXT    NOT NULL DEFAULT '[]',
+        health_data      TEXT,
+        environment_data TEXT,
+        location_data    TEXT,
+        calendar_events  TEXT    NOT NULL DEFAULT '[]',
+        processed_at     TEXT,
+        ai_insights      TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE INDEX idx_captures_timestamp ON $_tableCaptures(timestamp DESC)
+    ''');
+    await db.execute('''
+      CREATE INDEX idx_captures_processed ON $_tableCaptures(is_processed)
+    ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -96,6 +121,33 @@ class LocalDbService {
       } catch (e) {
         if (!e.toString().toLowerCase().contains('duplicate column')) rethrow;
       }
+    }
+    if (oldVersion < 4) {
+      // v3 → v4: add captures table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $_tableCaptures (
+          id               TEXT    PRIMARY KEY,
+          timestamp        TEXT    NOT NULL,
+          is_processed     INTEGER NOT NULL DEFAULT 0,
+          user_note        TEXT,
+          user_mood        TEXT,
+          tags             TEXT    NOT NULL DEFAULT '[]',
+          health_data      TEXT,
+          environment_data TEXT,
+          location_data    TEXT,
+          calendar_events  TEXT    NOT NULL DEFAULT '[]',
+          processed_at     TEXT,
+          ai_insights      TEXT
+        )
+      ''');
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_captures_timestamp 
+        ON $_tableCaptures(timestamp DESC)
+      ''');
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_captures_processed 
+        ON $_tableCaptures(is_processed)
+      ''');
     }
   }
 
@@ -294,5 +346,86 @@ class LocalDbService {
       columns: ['date', 'mood', 'mood_emoji', 'tags', 'user_note', 'user_mood'],
       orderBy: 'date DESC',
     );
+  }
+
+  // ── captures ──────────────────────────────────────────────────────────────
+
+  /// Save a capture entry (insert or replace).
+  Future<void> saveCapture(CaptureEntry capture) async {
+    final db = await _database;
+    await db.insert(
+      _tableCaptures,
+      capture.toJson(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Load a specific capture by ID.
+  Future<CaptureEntry?> loadCapture(String id) async {
+    final db = await _database;
+    final rows = await db.query(
+      _tableCaptures,
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return CaptureEntry.fromJson(rows.first);
+  }
+
+  /// Load captures, optionally filtered by processed status.
+  /// Results are ordered by timestamp descending (newest first).
+  Future<List<CaptureEntry>> loadCaptures({
+    bool? isProcessed,
+    int? limit,
+  }) async {
+    final db = await _database;
+    
+    String? where;
+    List<Object?>? whereArgs;
+    
+    if (isProcessed != null) {
+      where = 'is_processed = ?';
+      whereArgs = [isProcessed ? 1 : 0];
+    }
+    
+    final rows = await db.query(
+      _tableCaptures,
+      where: where,
+      whereArgs: whereArgs,
+      orderBy: 'timestamp DESC',
+      limit: limit,
+    );
+    
+    return rows.map((row) => CaptureEntry.fromJson(row)).toList();
+  }
+
+  /// Delete a capture by ID.
+  Future<void> deleteCapture(String id) async {
+    final db = await _database;
+    await db.delete(
+      _tableCaptures,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Get count of captures, optionally filtered by processed status.
+  Future<int> countCaptures({bool? isProcessed}) async {
+    final db = await _database;
+    
+    String? where;
+    List<Object?>? whereArgs;
+    
+    if (isProcessed != null) {
+      where = 'is_processed = ?';
+      whereArgs = [isProcessed ? 1 : 0];
+    }
+    
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as c FROM $_tableCaptures${where != null ? ' WHERE $where' : ''}',
+      whereArgs,
+    );
+    return (result.first['c'] as int?) ?? 0;
   }
 }
