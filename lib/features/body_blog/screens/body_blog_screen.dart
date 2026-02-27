@@ -25,6 +25,8 @@ class _BodyBlogScreenState extends State<BodyBlogScreen> {
   List<BodyBlogEntry> _entries = [];
   int _currentPage = 0;
   bool _loading = true;
+  bool _loadingMore = false;
+  static const int _pageSize = 7;
 
   @override
   void initState() {
@@ -41,7 +43,7 @@ class _BodyBlogScreenState extends State<BodyBlogScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final entries = await _blogService.getRecentEntries(days: 7);
+      final entries = await _blogService.getRecentEntries(days: _pageSize);
       if (mounted) {
         setState(() {
           _entries = entries;
@@ -53,12 +55,35 @@ class _BodyBlogScreenState extends State<BodyBlogScreen> {
     }
   }
 
+  /// Lazily fetch older entries when the user approaches the end.
+  Future<void> _loadMore() async {
+    if (_loadingMore) return;
+    _loadingMore = true;
+    try {
+      final moreEntries = await _blogService.getRecentEntries(
+        days: _entries.length + _pageSize,
+      );
+      if (mounted && moreEntries.length > _entries.length) {
+        setState(() => _entries = moreEntries);
+      }
+    } catch (_) {}
+    _loadingMore = false;
+  }
+
   void _goPage(int page) {
     if (page < 0 || page >= _entries.length) return;
     _pageCtrl.animateToPage(
       page,
       duration: const Duration(milliseconds: 400),
       curve: Curves.easeInOutCubic,
+    );
+  }
+
+  void _goToday() {
+    _pageCtrl.animateToPage(
+      0,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeOutCubic,
     );
   }
 
@@ -76,29 +101,46 @@ class _BodyBlogScreenState extends State<BodyBlogScreen> {
               ? const Center(child: _ZenLoader())
               : _entries.isEmpty
               ? _emptyState(dark)
-              : Column(
+              : Stack(
                   children: [
-                    _TopBar(
-                      onDebug: () => context.push('/debug'),
-                      onRefresh: _load,
-                    ),
-                    Expanded(
-                      child: PageView.builder(
-                        controller: _pageCtrl,
-                        itemCount: _entries.length,
-                        onPageChanged: (i) => setState(() => _currentPage = i),
-                        itemBuilder: (ctx, i) => _BlogPage(
-                          entry: _entries[i],
-                          onReadMore: () => _openDetail(context, _entries[i]),
+                    Column(
+                      children: [
+                        _TopBar(
+                          onDebug: () => context.push('/debug'),
+                          onRefresh: _load,
                         ),
+                        Expanded(
+                          child: PageView.builder(
+                            controller: _pageCtrl,
+                            itemCount: _entries.length,
+                            onPageChanged: (i) {
+                              setState(() => _currentPage = i);
+                              // Pre-fetch older entries when nearing the end
+                              if (i >= _entries.length - 3) _loadMore();
+                            },
+                            itemBuilder: (ctx, i) => _BlogPage(
+                              entry: _entries[i],
+                              onReadMore: () =>
+                                  _openDetail(context, _entries[i]),
+                            ),
+                          ),
+                        ),
+                        _DateNav(
+                          entries: _entries,
+                          current: _currentPage,
+                          onPrev: () => _goPage(_currentPage - 1),
+                          onNext: () => _goPage(_currentPage + 1),
+                        ),
+                      ],
+                    ),
+                    // Floating "Today" pill — visible only when away from today
+                    if (_currentPage > 0)
+                      Positioned(
+                        bottom: 72,
+                        left: 0,
+                        right: 0,
+                        child: Center(child: _TodayPill(onTap: _goToday)),
                       ),
-                    ),
-                    _BottomNav(
-                      current: _currentPage,
-                      total: _entries.length,
-                      onPrev: () => _goPage(_currentPage - 1),
-                      onNext: () => _goPage(_currentPage + 1),
-                    ),
                   ],
                 ),
         ),
@@ -468,19 +510,19 @@ class _Tag extends StatelessWidget {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-//  BOTTOM NAVIGATION — prev / page dots / next
+//  DATE-AWARE NAVIGATION BAR
 // ═════════════════════════════════════════════════════════════════════════════
 
-class _BottomNav extends StatelessWidget {
-  const _BottomNav({
+class _DateNav extends StatelessWidget {
+  const _DateNav({
+    required this.entries,
     required this.current,
-    required this.total,
     required this.onPrev,
     required this.onNext,
   });
 
+  final List<BodyBlogEntry> entries;
   final int current;
-  final int total;
   final VoidCallback onPrev;
   final VoidCallback onNext;
 
@@ -488,97 +530,180 @@ class _BottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).colorScheme.primary;
+    final hasNewer = current > 0;
+    final hasOlder = current < entries.length - 1;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // prev
-          _NavArrow(
-            icon: Icons.chevron_left_rounded,
-            enabled: current > 0,
-            onTap: onPrev,
-            label: 'Newer',
+          // ── Left arrow: show target date ─────────────────
+          Expanded(
+            child: _DateArrow(
+              enabled: hasNewer,
+              onTap: onPrev,
+              label: hasNewer ? _shortDate(entries[current - 1].date) : '',
+              icon: Icons.chevron_left_rounded,
+              alignment: Alignment.centerLeft,
+            ),
           ),
 
-          // dots
-          Row(
+          // ── Center: current date with relative label ────
+          Column(
             mainAxisSize: MainAxisSize.min,
-            children: List.generate(total > 7 ? 7 : total, (i) {
-              // Show max 7 dots; highlight the one matching current
-              final dotIdx = total > 7
-                  ? (current - 3).clamp(0, total - 7) + i
-                  : i;
-              final active = dotIdx == current;
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                margin: const EdgeInsets.symmetric(horizontal: 3),
-                width: active ? 18 : 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: active
-                      ? primary
-                      : (dark
-                            ? Colors.white.withValues(alpha: 0.15)
-                            : Colors.black.withValues(alpha: 0.12)),
-                  borderRadius: BorderRadius.circular(3),
+            children: [
+              Text(
+                _relativeLabel(entries[current].date),
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.2,
+                  color: primary,
                 ),
-              );
-            }),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                DateFormat('MMM d, y').format(entries[current].date),
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                  color: dark ? Colors.white54 : Colors.black45,
+                ),
+              ),
+            ],
           ),
 
-          // next
-          _NavArrow(
-            icon: Icons.chevron_right_rounded,
-            enabled: current < total - 1,
-            onTap: onNext,
-            label: 'Older',
+          // ── Right arrow: show target date ────────────────
+          Expanded(
+            child: _DateArrow(
+              enabled: hasOlder,
+              onTap: onNext,
+              label: hasOlder ? _shortDate(entries[current + 1].date) : '',
+              icon: Icons.chevron_right_rounded,
+              alignment: Alignment.centerRight,
+            ),
           ),
         ],
       ),
     );
   }
+
+  /// "Today", "Yesterday", or "Mon", "Tue" etc.
+  String _relativeLabel(DateTime d) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(d.year, d.month, d.day);
+    final diff = today.difference(day).inDays;
+    if (diff == 0) return 'TODAY';
+    if (diff == 1) return 'YESTERDAY';
+    if (diff < 7) return '$diff DAYS AGO';
+    return '$diff DAYS AGO';
+  }
+
+  /// Compact date for the arrow labels: "Feb 24" or "Mon 24".
+  String _shortDate(DateTime d) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(d.year, d.month, d.day);
+    if (day == today) return 'Today';
+    if (day == today.subtract(const Duration(days: 1))) return 'Yesterday';
+    return DateFormat('EEE d').format(d);
+  }
 }
 
-class _NavArrow extends StatelessWidget {
-  const _NavArrow({
-    required this.icon,
+class _DateArrow extends StatelessWidget {
+  const _DateArrow({
     required this.enabled,
     required this.onTap,
     required this.label,
+    required this.icon,
+    required this.alignment,
   });
 
-  final IconData icon;
   final bool enabled;
   final VoidCallback onTap;
   final String label;
+  final IconData icon;
+  final Alignment alignment;
 
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final color = enabled
         ? (dark ? Colors.white70 : Colors.black54)
-        : (dark ? Colors.white12 : Colors.black12);
+        : Colors.transparent;
 
     return GestureDetector(
       onTap: enabled ? onTap : null,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon == Icons.chevron_left_rounded)
-            Icon(icon, color: color, size: 22),
-          Text(
-            label,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: color,
-            ),
+      behavior: HitTestBehavior.opaque,
+      child: Align(
+        alignment: alignment,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon == Icons.chevron_left_rounded)
+                Icon(icon, color: color, size: 22),
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: color,
+                ),
+              ),
+              if (icon == Icons.chevron_right_rounded)
+                Icon(icon, color: color, size: 22),
+            ],
           ),
-          if (icon == Icons.chevron_right_rounded)
-            Icon(icon, color: color, size: 22),
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  "TODAY" FLOATING PILL
+// ═════════════════════════════════════════════════════════════════════════════
+
+class _TodayPill extends StatelessWidget {
+  const _TodayPill({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return Material(
+      color: primary,
+      borderRadius: BorderRadius.circular(20),
+      elevation: 4,
+      shadowColor: primary.withValues(alpha: 0.4),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.arrow_upward_rounded,
+                size: 16,
+                color: Colors.white,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Today',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
