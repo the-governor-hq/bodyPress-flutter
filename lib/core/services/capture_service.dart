@@ -137,33 +137,18 @@ class CaptureService {
         heartRate = (rates.reduce((a, b) => a + b) / rates.length).round();
       }
 
-      // Get today's sleep (if available)
-      final sleepData = await _healthService.getSleepData(
-        startTime: startOfDay,
-        endTime: now,
-      );
-      double? sleepHours;
-      if (sleepData.isNotEmpty) {
-        final totalMinutes = sleepData.fold<double>(
-          0,
-          (sum, dp) => sum + (dp.value as dynamic).numericValue,
-        );
-        sleepHours = totalMinutes / 60;
-      }
+      // Get last night's sleep
+      final sleepHours = await _healthService.getLastNightSleep();
 
       // Get today's workouts
-      final workoutData = await _healthService.getWorkoutData(
-        startTime: startOfDay,
-        endTime: now,
-      );
-      final workouts = workoutData.length;
+      final workouts = await _healthService.getTodayWorkoutCount();
 
       return CaptureHealthData(
         steps: steps > 0 ? steps : null,
         calories: calories > 0 ? calories : null,
         distance: distance > 0 ? distance : null,
         heartRate: heartRate,
-        sleepHours: sleepHours,
+        sleepHours: sleepHours > 0 ? sleepHours : null,
         workouts: workouts > 0 ? workouts : null,
       );
     } catch (e) {
@@ -181,20 +166,24 @@ class CaptureService {
         return null;
       }
 
-      final ambientData = await _ambientService.getAmbientScan(
-        lat: location.latitude,
-        lon: location.longitude,
+      final ambientData = await _ambientService.scanByCoordinates(
+        location.latitude,
+        location.longitude,
       );
 
+      if (ambientData == null) {
+        return null;
+      }
+
       return CaptureEnvironmentData(
-        temperature: ambientData.temperature.current,
-        aqi: ambientData.airQuality.aqiUs,
+        temperature: ambientData.temperature.currentC,
+        aqi: ambientData.airQuality.usAqi,
         uvIndex: ambientData.uvIndex.current,
         weatherDescription: ambientData.conditions.description,
-        humidity: ambientData.humidity.current,
+        humidity: ambientData.humidity.relativePercent,
         windSpeed: ambientData.wind.speedKmh,
-        pressure: ambientData.atmosphere.pressureMb,
-        conditions: ambientData.conditions.main,
+        pressure: ambientData.atmosphere.pressureMslHpa,
+        conditions: ambientData.conditions.description,
       );
     } catch (e) {
       print('Error collecting environment data: $e');
@@ -210,20 +199,33 @@ class CaptureService {
         return null;
       }
 
-      // Get GPS metrics for city/region/country info
-      final gpsMetrics = await _gpsMetricsService.getGpsMetrics(
-        lat: location.latitude,
-        lon: location.longitude,
-      );
+      // Get city/region/country from ambient scan metadata
+      String? city;
+      String? region;
+      String? country;
+
+      try {
+        final ambientData = await _ambientService.scanByCoordinates(
+          location.latitude,
+          location.longitude,
+        );
+        if (ambientData != null) {
+          city = ambientData.meta.city;
+          region = ambientData.meta.region;
+          country = ambientData.meta.country;
+        }
+      } catch (e) {
+        print('Error getting location metadata: $e');
+      }
 
       return CaptureLocationData(
         latitude: location.latitude,
         longitude: location.longitude,
         altitude: location.altitude,
         accuracy: location.accuracy,
-        city: gpsMetrics.city,
-        region: gpsMetrics.region,
-        country: gpsMetrics.country,
+        city: city,
+        region: region,
+        country: country,
       );
     } catch (e) {
       print('Error collecting location data: $e');
@@ -234,15 +236,7 @@ class CaptureService {
   /// Collect calendar events for today.
   Future<List<String>> _collectCalendarEvents() async {
     try {
-      final now = DateTime.now();
-      final startOfDay = DateTime(now.year, now.month, now.day);
-      final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59);
-
-      final events = await _calendarService.getEvents(
-        startDate: startOfDay,
-        endDate: endOfDay,
-      );
-
+      final events = await _calendarService.getTodayEvents();
       return events.map((e) => e.title ?? 'Untitled Event').toList();
     } catch (e) {
       print('Error collecting calendar events: $e');
