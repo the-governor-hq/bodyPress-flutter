@@ -255,7 +255,7 @@ class _TopBar extends ConsumerWidget {
           IconButton(
             onPressed: onDebug,
             icon: Icon(
-              Icons.settings_outlined,
+              Icons.bug_report_outlined,
               color: dark ? Colors.white38 : Colors.black26,
               size: 22,
             ),
