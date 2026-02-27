@@ -3,6 +3,23 @@ import 'package:sqflite/sqflite.dart';
 
 import '../models/body_blog_entry.dart';
 
+/// Snapshot of database metadata for the debug panel.
+class DbInfo {
+  final String path;
+  final int schemaVersion;
+  final int entryCount;
+  final String? oldestDate;
+  final String? newestDate;
+
+  const DbInfo({
+    required this.path,
+    required this.schemaVersion,
+    required this.entryCount,
+    this.oldestDate,
+    this.newestDate,
+  });
+}
+
 /// SQLite persistence layer for [BodyBlogEntry] records.
 ///
 /// One row per calendar day (PK = ISO date string "yyyy-MM-dd").
@@ -162,5 +179,62 @@ class LocalDbService {
       'SELECT COUNT(*) as c FROM $_tableEntries',
     );
     return (result.first['c'] as int?) ?? 0;
+  }
+
+  /// Load the [n] most-recent entries, newest first.
+  Future<List<BodyBlogEntry>> loadRecentEntries(int n) async {
+    final db = await _database;
+    final rows = await db.query(_tableEntries, orderBy: 'date DESC', limit: n);
+    return rows.map(_fromRow).toList();
+  }
+
+  /// Filesystem path of the database file (useful for debug).
+  Future<String> getDatabasePath() async {
+    final dir = await getDatabasesPath();
+    return p.join(dir, _dbName);
+  }
+
+  /// Aggregate information about the database, used by the debug panel.
+  Future<DbInfo> getDbInfo() async {
+    final db = await _database;
+    final entryCount =
+        (await db.rawQuery(
+              'SELECT COUNT(*) as c FROM $_tableEntries',
+            )).first['c']
+            as int? ??
+        0;
+    final oldest =
+        (await db.query(
+              _tableEntries,
+              orderBy: 'date ASC',
+              limit: 1,
+            )).firstOrNull?['date']
+            as String?;
+    final newest =
+        (await db.query(
+              _tableEntries,
+              orderBy: 'date DESC',
+              limit: 1,
+            )).firstOrNull?['date']
+            as String?;
+    final dbPath = await getDatabasePath();
+    return DbInfo(
+      path: dbPath,
+      schemaVersion: _schemaVersion,
+      entryCount: entryCount,
+      oldestDate: oldest,
+      newestDate: newest,
+    );
+  }
+
+  /// Raw rows for the debug inspector — returns lightweight maps
+  /// (excludes the large full_body and snapshot JSON columns).
+  Future<List<Map<String, Object?>>> getDebugRows() async {
+    final db = await _database;
+    return db.query(
+      _tableEntries,
+      columns: ['date', 'mood', 'mood_emoji', 'tags', 'user_note'],
+      orderBy: 'date DESC',
+    );
   }
 }

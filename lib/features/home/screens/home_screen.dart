@@ -1,12 +1,15 @@
 import 'package:device_calendar/device_calendar.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/services/ambient_scan_service.dart';
 import '../../../core/services/calendar_service.dart';
+import '../../../core/services/context_window_service.dart';
 import '../../../core/services/gps_metrics_service.dart';
 import '../../../core/services/health_service.dart';
+import '../../../core/services/local_db_service.dart';
 import '../../../core/services/location_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -22,6 +25,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final CalendarService _calendarService = CalendarService();
   final AmbientScanService _ambientService = AmbientScanService();
   final GpsMetricsService _gpsMetricsService = GpsMetricsService();
+  final LocalDbService _dbService = LocalDbService();
+  final ContextWindowService _contextWindowService = ContextWindowService();
 
   int _todaySteps = 0;
   double _todayCalories = 0;
@@ -35,6 +40,13 @@ class _HomeScreenState extends State<HomeScreen> {
   GpsMetrics? _gpsMetrics;
   bool _isLoading = true;
   bool _isInitialLoad = true;
+
+  // DB + context state
+  DbInfo? _dbInfo;
+  List<Map<String, Object?>> _dbRows = [];
+  String _contextWindowText = '';
+  bool _dbSectionExpanded = true;
+  bool _contextSectionExpanded = true;
 
   @override
   void initState() {
@@ -168,6 +180,19 @@ class _HomeScreenState extends State<HomeScreen> {
         print('Error loading GPS metrics: $e');
       }
 
+      // Load DB info + context window
+      DbInfo? dbInfo;
+      List<Map<String, Object?>> dbRows = [];
+      String contextWindowText = '';
+      try {
+        dbInfo = await _dbService.getDbInfo();
+        dbRows = await _dbService.getDebugRows();
+        final cwResult = await _contextWindowService.build(days: 7);
+        contextWindowText = cwResult.text;
+      } catch (e) {
+        print('Error loading DB / context window: $e');
+      }
+
       if (mounted) {
         setState(() {
           _todaySteps = steps;
@@ -180,6 +205,9 @@ class _HomeScreenState extends State<HomeScreen> {
           _todayEvents = events;
           _ambientData = ambientData;
           _gpsMetrics = gpsMetrics;
+          _dbInfo = dbInfo;
+          _dbRows = dbRows;
+          _contextWindowText = contextWindowText;
           _isLoading = false;
           _isInitialLoad = false;
         });
@@ -232,6 +260,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     _buildEnvironmentSummarySection(),
                     const SizedBox(height: 24),
                     _buildCalendarSection(),
+                    const SizedBox(height: 24),
+                    _buildDatabaseSection(),
+                    const SizedBox(height: 24),
+                    _buildContextWindowSection(),
+                    const SizedBox(height: 32),
                   ],
                 ),
               ),
@@ -709,6 +742,250 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
+      ],
+    );
+  }
+
+  // ── Database inspector ──────────────────────────────────────────────────
+
+  Widget _buildDatabaseSection() {
+    final info = _dbInfo;
+    final primary = Theme.of(context).colorScheme.primary;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _dbSectionExpanded = !_dbSectionExpanded),
+          borderRadius: BorderRadius.circular(8),
+          child: Row(
+            children: [
+              Icon(Icons.storage_rounded, color: primary, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Database Inspector',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ),
+              Icon(
+                _dbSectionExpanded ? Icons.expand_less : Icons.expand_more,
+                color: Colors.grey,
+              ),
+            ],
+          ),
+        ),
+        if (_dbSectionExpanded) ...[
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Metadata rows
+                  _dbKv(
+                    'Schema version',
+                    info != null ? '${info.schemaVersion}' : '—',
+                  ),
+                  _dbKv(
+                    'Entries stored',
+                    info != null ? '${info.entryCount}' : '—',
+                  ),
+                  _dbKv('Oldest entry', info?.oldestDate ?? '—'),
+                  _dbKv('Newest entry', info?.newestDate ?? '—'),
+                  _dbKv('Path', info?.path ?? '—', mono: true, small: true),
+                  if (_dbRows.isNotEmpty) ...[
+                    const Divider(height: 24),
+                    Text(
+                      'Stored entries (newest first)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...(_dbRows.map((row) {
+                      final date = row['date'] as String? ?? '?';
+                      final mood = row['mood'] as String? ?? '';
+                      final emoji = row['mood_emoji'] as String? ?? '';
+                      final note = row['user_note'] as String?;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: 100,
+                              child: Text(
+                                date,
+                                style: const TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              '$emoji $mood',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            if (note != null && note.isNotEmpty) ...[
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '✏️ "$note"',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontStyle: FontStyle.italic,
+                                    color: Colors.grey[600],
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    })),
+                  ],
+                  if (_dbRows.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        'No entries yet — open the journal to generate today\'s entry.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[500],
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _dbKv(
+    String key,
+    String value, {
+    bool mono = false,
+    bool small = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 130,
+            child: Text(
+              key,
+              style: TextStyle(
+                fontSize: small ? 11 : 13,
+                color: Colors.grey[600],
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: small ? 11 : 13,
+                fontFamily: mono ? 'monospace' : null,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── 7-day context window ─────────────────────────────────────────────────
+
+  Widget _buildContextWindowSection() {
+    final primary = Theme.of(context).colorScheme.primary;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(
+            () => _contextSectionExpanded = !_contextSectionExpanded,
+          ),
+          borderRadius: BorderRadius.circular(8),
+          child: Row(
+            children: [
+              Icon(Icons.receipt_long_rounded, color: primary, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '7-Day Context Window',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ),
+              if (_contextWindowText.isNotEmpty)
+                IconButton(
+                  tooltip: 'Copy to clipboard',
+                  icon: const Icon(Icons.copy_outlined, size: 18),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: _contextWindowText));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Context window copied to clipboard'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                ),
+              Icon(
+                _contextSectionExpanded ? Icons.expand_less : Icons.expand_more,
+                color: Colors.grey,
+              ),
+            ],
+          ),
+        ),
+        if (_contextSectionExpanded) ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            constraints: const BoxConstraints(maxHeight: 420),
+            decoration: BoxDecoration(
+              color: dark ? const Color(0xFF0F0F0F) : const Color(0xFFF5F5F5),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: dark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.black.withValues(alpha: 0.08),
+              ),
+            ),
+            child: Scrollbar(
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(14),
+                child: SelectableText(
+                  _contextWindowText.isEmpty
+                      ? 'No data yet — entries appear after the first journal load.'
+                      : _contextWindowText,
+                  style: TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 11.5,
+                    height: 1.65,
+                    color: dark ? Colors.green[300] : Colors.blueGrey[800],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }

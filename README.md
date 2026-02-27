@@ -33,6 +33,7 @@ lib/
 │   ├── services/
 │   │   ├── body_blog_service.dart    # Data collection + narrative composition + DB integration
 │   │   ├── local_db_service.dart     # SQLite persistence (sqflite) — CRUD for BodyBlogEntry
+│   │   ├── context_window_service.dart # 7-day plain-text context builder (debug + LLM-ready)
 │   │   ├── health_service.dart       # HealthKit / Health Connect abstraction
 │   │   ├── location_service.dart     # Geolocator wrapper
 │   │   ├── ambient_scan_service.dart # Environment API client
@@ -108,7 +109,7 @@ This will be replaced by a classifier or LLM prompt once sufficient labelled dat
 
 - [ ] LLM-backed narrative generation (structured prompt with BodySnapshot as context)
 - [x] Local persistence of daily entries (SQLite via sqflite)
-- [ ] 7-day rolling context window — AI reads the past week to detect trends
+- [x] 7-day rolling context window — plain-text summary of last 7 DB entries, shown in debug panel + clipboard-ready for LLM prompts
 - [x] User annotations — free-text note per day, stored in SQLite, shown in journal detail
 
 ### Mid-term — BLE peripherals
