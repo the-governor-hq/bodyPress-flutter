@@ -125,6 +125,9 @@ class ContextWindowService {
       }
 
       // User annotation
+      if (e.userMood != null) {
+        buf.writeln('User mood: ${e.userMood}');
+      }
       if (e.userNote != null && e.userNote!.isNotEmpty) {
         buf.writeln('User note: "${e.userNote}"');
       }

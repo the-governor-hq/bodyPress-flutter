@@ -835,10 +835,29 @@ class _BlogDetailPageState extends State<_BlogDetailPage> {
     _entry = widget.entry;
   }
 
+  /// Return the label for a mood emoji, or the emoji itself as fallback.
+  String _moodLabel(String emoji) {
+    for (final option in _moodOptions) {
+      if (option.$1 == emoji) return option.$2;
+    }
+    return emoji;
+  }
+
+  /// Mood options available to the user.
+  static const _moodOptions = [
+    ('😊', 'Great'),
+    ('😌', 'Good'),
+    ('😐', 'Meh'),
+    ('😔', 'Low'),
+    ('🤯', 'Stressed'),
+    ('😴', 'Tired'),
+  ];
+
   Future<void> _showNoteEditor() async {
     final controller = TextEditingController(text: _entry.userNote ?? '');
     final dark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).colorScheme.primary;
+    String? selectedMood = _entry.userMood;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -848,120 +867,191 @@ class _BlogDetailPageState extends State<_BlogDetailPage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 24,
-            right: 24,
-            top: 24,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 24,
+                right: 24,
+                top: 24,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Your note',
-                    style: GoogleFonts.playfairDisplay(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: dark ? Colors.white : Colors.black87,
+                  Row(
+                    children: [
+                      Text(
+                        'How are you feeling?',
+                        style: GoogleFonts.playfairDisplay(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: dark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      const Spacer(),
+                      if ((_entry.userNote != null &&
+                              _entry.userNote!.isNotEmpty) ||
+                          _entry.userMood != null)
+                        TextButton(
+                          onPressed: () async {
+                            Navigator.of(ctx).pop();
+                            final updated = await _blogService.saveUserNote(
+                              _entry.date,
+                              null,
+                              mood: null,
+                            );
+                            if (updated != null && mounted) {
+                              setState(() => _entry = updated);
+                            }
+                          },
+                          child: Text(
+                            'Clear',
+                            style: GoogleFonts.inter(
+                              color: Colors.redAccent,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // ── mood picker row ──
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: _moodOptions.map((option) {
+                      final emoji = option.$1;
+                      final label = option.$2;
+                      final isSelected = selectedMood == emoji;
+                      return GestureDetector(
+                        onTap: () {
+                          setSheetState(() {
+                            selectedMood = isSelected ? null : emoji;
+                          });
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? primary.withValues(alpha: dark ? 0.25 : 0.12)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isSelected ? primary : Colors.transparent,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                emoji,
+                                style: TextStyle(
+                                  fontSize: isSelected ? 28 : 24,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                label,
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                  color: isSelected
+                                      ? primary
+                                      : (dark
+                                            ? Colors.white38
+                                            : Colors.black38),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    maxLines: 5,
+                    minLines: 2,
+                    style: GoogleFonts.inter(
+                      fontSize: 15,
+                      height: 1.6,
+                      color: dark ? Colors.white70 : Colors.black87,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Add a note (optional)',
+                      hintStyle: GoogleFonts.inter(
+                        color: dark ? Colors.white30 : Colors.black38,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: primary.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: dark
+                              ? Colors.white.withValues(alpha: 0.15)
+                              : Colors.black.withValues(alpha: 0.12),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: primary, width: 1.5),
+                      ),
+                      contentPadding: const EdgeInsets.all(14),
                     ),
                   ),
-                  const Spacer(),
-                  if (_entry.userNote != null && _entry.userNote!.isNotEmpty)
-                    TextButton(
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
                       onPressed: () async {
+                        final note = controller.text.trim();
                         Navigator.of(ctx).pop();
                         final updated = await _blogService.saveUserNote(
                           _entry.date,
-                          null,
+                          note.isEmpty ? null : note,
+                          mood: selectedMood,
                         );
                         if (updated != null && mounted) {
                           setState(() => _entry = updated);
                         }
                       },
+                      style: FilledButton.styleFrom(
+                        backgroundColor: primary,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
                       child: Text(
-                        'Clear',
+                        selectedMood != null ? '$selectedMood  Save' : 'Save',
                         style: GoogleFonts.inter(
-                          color: Colors.redAccent,
-                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
                         ),
                       ),
                     ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                maxLines: 6,
-                minLines: 3,
-                style: GoogleFonts.inter(
-                  fontSize: 15,
-                  height: 1.6,
-                  color: dark ? Colors.white70 : Colors.black87,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'How did today actually feel?',
-                  hintStyle: GoogleFonts.inter(
-                    color: dark ? Colors.white30 : Colors.black38,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: primary.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: dark
-                          ? Colors.white.withValues(alpha: 0.15)
-                          : Colors.black.withValues(alpha: 0.12),
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: primary, width: 1.5),
-                  ),
-                  contentPadding: const EdgeInsets.all(14),
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () async {
-                    final note = controller.text.trim();
-                    Navigator.of(ctx).pop();
-                    final updated = await _blogService.saveUserNote(
-                      _entry.date,
-                      note.isEmpty ? null : note,
-                    );
-                    if (updated != null && mounted) {
-                      setState(() => _entry = updated);
-                    }
-                  },
-                  style: FilledButton.styleFrom(
-                    backgroundColor: primary,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(
-                    'Save note',
-                    style: GoogleFonts.inter(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -1000,17 +1090,26 @@ class _BlogDetailPageState extends State<_BlogDetailPage> {
                   ),
                   const SizedBox(width: 4),
                   IconButton(
-                    tooltip: _entry.userNote != null ? 'Edit note' : 'Add note',
+                    tooltip: _entry.userMood != null
+                        ? 'Edit mood & note'
+                        : (_entry.userNote != null
+                              ? 'Edit note'
+                              : 'Add mood & note'),
                     onPressed: _showNoteEditor,
-                    icon: Icon(
-                      _entry.userNote != null
-                          ? Icons.edit_note_rounded
-                          : Icons.add_comment_outlined,
-                      size: 20,
-                      color: _entry.userNote != null
-                          ? primary
-                          : (dark ? Colors.white38 : Colors.black38),
-                    ),
+                    icon: _entry.userMood != null
+                        ? Text(
+                            _entry.userMood!,
+                            style: const TextStyle(fontSize: 22),
+                          )
+                        : Icon(
+                            _entry.userNote != null
+                                ? Icons.edit_note_rounded
+                                : Icons.add_comment_outlined,
+                            size: 20,
+                            color: _entry.userNote != null
+                                ? primary
+                                : (dark ? Colors.white38 : Colors.black38),
+                          ),
                   ),
                 ],
               ),
@@ -1091,8 +1190,9 @@ class _BlogDetailPageState extends State<_BlogDetailPage> {
                       ),
 
                     // user note block
-                    if (_entry.userNote != null &&
-                        _entry.userNote!.isNotEmpty) ...[
+                    if ((_entry.userNote != null &&
+                            _entry.userNote!.isNotEmpty) ||
+                        _entry.userMood != null) ...[
                       const SizedBox(height: 32),
                       Container(
                         width: double.infinity,
@@ -1109,14 +1209,24 @@ class _BlogDetailPageState extends State<_BlogDetailPage> {
                           children: [
                             Row(
                               children: [
-                                Icon(
-                                  Icons.edit_note_rounded,
-                                  size: 14,
-                                  color: primary.withValues(alpha: 0.7),
-                                ),
-                                const SizedBox(width: 6),
+                                if (_entry.userMood != null) ...[
+                                  Text(
+                                    _entry.userMood!,
+                                    style: const TextStyle(fontSize: 18),
+                                  ),
+                                  const SizedBox(width: 8),
+                                ] else ...[
+                                  Icon(
+                                    Icons.edit_note_rounded,
+                                    size: 14,
+                                    color: primary.withValues(alpha: 0.7),
+                                  ),
+                                  const SizedBox(width: 6),
+                                ],
                                 Text(
-                                  'Your note',
+                                  _entry.userMood != null
+                                      ? _moodLabel(_entry.userMood!)
+                                      : 'Your note',
                                   style: GoogleFonts.inter(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
@@ -1137,16 +1247,19 @@ class _BlogDetailPageState extends State<_BlogDetailPage> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 10),
-                            Text(
-                              _entry.userNote!,
-                              style: GoogleFonts.inter(
-                                fontSize: 14,
-                                height: 1.65,
-                                fontStyle: FontStyle.italic,
-                                color: dark ? Colors.white70 : Colors.black54,
+                            if (_entry.userNote != null &&
+                                _entry.userNote!.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              Text(
+                                _entry.userNote!,
+                                style: GoogleFonts.inter(
+                                  fontSize: 14,
+                                  height: 1.65,
+                                  fontStyle: FontStyle.italic,
+                                  color: dark ? Colors.white70 : Colors.black54,
+                                ),
                               ),
-                            ),
+                            ],
                           ],
                         ),
                       ),
@@ -1163,7 +1276,7 @@ class _BlogDetailPageState extends State<_BlogDetailPage> {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              'Add a note about today',
+                              'How are you feeling today?',
                               style: GoogleFonts.inter(
                                 fontSize: 13,
                                 color: dark ? Colors.white24 : Colors.black26,

@@ -18,6 +18,9 @@ class BodyBlogEntry {
   /// Optional free-text note added manually by the user.
   final String? userNote;
 
+  /// Optional user-reported mood emoji (e.g. '😊', '😔').
+  final String? userMood;
+
   const BodyBlogEntry({
     required this.date,
     required this.headline,
@@ -28,6 +31,7 @@ class BodyBlogEntry {
     required this.tags,
     required this.snapshot,
     this.userNote,
+    this.userMood,
   });
 
   BodyBlogEntry copyWith({
@@ -41,6 +45,8 @@ class BodyBlogEntry {
     BodySnapshot? snapshot,
     String? userNote,
     bool clearUserNote = false,
+    String? userMood,
+    bool clearUserMood = false,
   }) {
     return BodyBlogEntry(
       date: date ?? this.date,
@@ -52,6 +58,7 @@ class BodyBlogEntry {
       tags: tags ?? this.tags,
       snapshot: snapshot ?? this.snapshot,
       userNote: clearUserNote ? null : (userNote ?? this.userNote),
+      userMood: clearUserMood ? null : (userMood ?? this.userMood),
     );
   }
 
@@ -64,6 +71,7 @@ class BodyBlogEntry {
     'mood_emoji': moodEmoji,
     'tags': jsonEncode(tags),
     'user_note': userNote,
+    'user_mood': userMood,
     'snapshot': jsonEncode(snapshot.toJson()),
   };
 
@@ -81,6 +89,7 @@ class BodyBlogEntry {
           ? (jsonDecode(tagsRaw) as List).cast<String>()
           : const [],
       userNote: json['user_note'] as String?,
+      userMood: json['user_mood'] as String?,
       snapshot: snapshotRaw != null
           ? BodySnapshot.fromJson(
               jsonDecode(snapshotRaw) as Map<String, dynamic>,

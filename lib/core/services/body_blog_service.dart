@@ -26,11 +26,17 @@ class BodyBlogService {
   Future<BodyBlogEntry> getTodayEntry() async {
     final snapshot = await _collectSnapshot();
     final entry = _compose(DateTime.now(), snapshot);
-    // Preserve any existing user note when refreshing today's entry.
+    // Preserve any existing user note & mood when refreshing today's entry.
     final existing = await _db.loadEntry(entry.date);
-    final toSave = existing?.userNote != null
-        ? entry.copyWith(userNote: existing!.userNote)
-        : entry;
+    var toSave = entry;
+    if (existing != null) {
+      if (existing.userNote != null) {
+        toSave = toSave.copyWith(userNote: existing.userNote);
+      }
+      if (existing.userMood != null) {
+        toSave = toSave.copyWith(userMood: existing.userMood);
+      }
+    }
     await _db.saveEntry(toSave);
     return toSave;
   }
@@ -55,11 +61,15 @@ class BodyBlogService {
     return entries;
   }
 
-  /// Persist or clear a user-written note for [date].
+  /// Persist or clear a user-written note and mood for [date].
   /// Returns the updated entry, or `null` when the entry is not in the DB
   /// (e.g. the date was never fetched).
-  Future<BodyBlogEntry?> saveUserNote(DateTime date, String? note) {
-    return _db.updateUserNote(date, note);
+  Future<BodyBlogEntry?> saveUserNote(
+    DateTime date,
+    String? note, {
+    String? mood,
+  }) {
+    return _db.updateUserNote(date, note, mood: mood);
   }
 
   // ── data collection ─────────────────────────────────────────────

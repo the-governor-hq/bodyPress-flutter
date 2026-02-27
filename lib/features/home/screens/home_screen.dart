@@ -812,6 +812,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       final mood = row['mood'] as String? ?? '';
                       final emoji = row['mood_emoji'] as String? ?? '';
                       final note = row['user_note'] as String?;
+                      final userMood = row['user_mood'] as String?;
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 4),
                         child: Row(
@@ -831,6 +832,13 @@ class _HomeScreenState extends State<HomeScreen> {
                               '$emoji $mood',
                               style: const TextStyle(fontSize: 12),
                             ),
+                            if (userMood != null) ...[
+                              const SizedBox(width: 4),
+                              Text(
+                                userMood,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
                             if (note != null && note.isNotEmpty) ...[
                               const SizedBox(width: 8),
                               Expanded(

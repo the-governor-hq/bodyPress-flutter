@@ -789,6 +789,7 @@ class _DebugScreenState extends State<DebugScreen> {
                 final row = _dbRows[i];
                 final tags = (row['tags'] as String?) ?? '[]';
                 final note = (row['user_note'] as String?);
+                final userMood = (row['user_mood'] as String?);
                 return Container(
                   margin: const EdgeInsets.only(bottom: 4),
                   padding: const EdgeInsets.symmetric(
@@ -818,6 +819,8 @@ class _DebugScreenState extends State<DebugScreen> {
                         style: mono,
                       ),
                       const Spacer(),
+                      if (userMood != null)
+                        Text(userMood, style: const TextStyle(fontSize: 13)),
                       if (note != null)
                         Icon(
                           Icons.edit_note,
@@ -1141,6 +1144,22 @@ class _DebugScreenState extends State<DebugScreen> {
                     _miniStat('📅', '${s.calendarEvents.length} events'),
                 ],
               ),
+              if (e.userMood != null) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Text(e.userMood!, style: const TextStyle(fontSize: 11)),
+                    const SizedBox(width: 4),
+                    Text(
+                      'user mood',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: dark ? Colors.white30 : Colors.black26,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               if (e.userNote != null) ...[
                 const SizedBox(height: 4),
                 Row(

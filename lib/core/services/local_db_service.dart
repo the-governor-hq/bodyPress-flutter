@@ -28,7 +28,7 @@ class LocalDbService {
   static const _dbName = 'bodypress.db';
   static const _tableEntries = 'entries';
   static const _tableSettings = 'settings';
-  static const _schemaVersion = 2;
+  static const _schemaVersion = 3;
 
   Database? _db;
 
@@ -63,6 +63,7 @@ class LocalDbService {
         mood_emoji TEXT    NOT NULL,
         tags       TEXT    NOT NULL DEFAULT '[]',
         user_note  TEXT,
+        user_mood  TEXT,
         snapshot   TEXT    NOT NULL DEFAULT '{}'
       )
     ''');
@@ -83,6 +84,10 @@ class LocalDbService {
           value TEXT NOT NULL
         )
       ''');
+    }
+    if (oldVersion < 3) {
+      // v2 → v3: add user_mood column
+      await db.execute('ALTER TABLE $_tableEntries ADD COLUMN user_mood TEXT');
     }
   }
 
@@ -163,13 +168,17 @@ class LocalDbService {
     return rows.map(_fromRow).toList();
   }
 
-  /// Overwrite only the `user_note` column for a given date.
+  /// Overwrite only the `user_note` and `user_mood` columns for a given date.
   /// Returns the updated entry, or `null` if the date does not exist.
-  Future<BodyBlogEntry?> updateUserNote(DateTime date, String? note) async {
+  Future<BodyBlogEntry?> updateUserNote(
+    DateTime date,
+    String? note, {
+    String? mood,
+  }) async {
     final db = await _database;
     final count = await db.update(
       _tableEntries,
-      {'user_note': note},
+      {'user_note': note, 'user_mood': mood},
       where: 'date = ?',
       whereArgs: [_dateKey(date)],
     );
@@ -274,7 +283,7 @@ class LocalDbService {
     final db = await _database;
     return db.query(
       _tableEntries,
-      columns: ['date', 'mood', 'mood_emoji', 'tags', 'user_note'],
+      columns: ['date', 'mood', 'mood_emoji', 'tags', 'user_note', 'user_mood'],
       orderBy: 'date DESC',
     );
   }
