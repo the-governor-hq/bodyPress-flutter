@@ -99,52 +99,57 @@ class _BodyBlogScreenState extends State<BodyBlogScreen> {
       value: dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
       child: Scaffold(
         body: SafeArea(
-          child: _loading
-              ? const Center(child: _ZenLoader())
-              : _entries.isEmpty
-              ? _emptyState(dark)
-              : Stack(
-                  children: [
-                    Column(
-                      children: [
-                        _TopBar(
-                          onDebug: () => context.push('/debug'),
-                          onRefresh: _load,
-                        ),
-                        Expanded(
-                          child: PageView.builder(
-                            controller: _pageCtrl,
-                            itemCount: _entries.length,
-                            onPageChanged: (i) {
-                              setState(() => _currentPage = i);
-                              // Pre-fetch older entries when nearing the end
-                              if (i >= _entries.length - 3) _loadMore();
-                            },
-                            itemBuilder: (ctx, i) => _BlogPage(
-                              entry: _entries[i],
-                              onReadMore: () =>
-                                  _openDetail(context, _entries[i]),
-                            ),
+          // _TopBar is always rendered so the app chrome is visible
+          // immediately, regardless of whether content is loading.
+          child: Column(
+            children: [
+              _TopBar(onDebug: () => context.push('/debug'), onRefresh: _load),
+              Expanded(
+                child: _loading
+                    ? const Center(child: _ZenLoader())
+                    : _entries.isEmpty
+                    ? _emptyState(dark)
+                    : Stack(
+                        children: [
+                          Column(
+                            children: [
+                              Expanded(
+                                child: PageView.builder(
+                                  controller: _pageCtrl,
+                                  itemCount: _entries.length,
+                                  onPageChanged: (i) {
+                                    setState(() => _currentPage = i);
+                                    // Pre-fetch older entries when nearing the end
+                                    if (i >= _entries.length - 3) _loadMore();
+                                  },
+                                  itemBuilder: (ctx, i) => _BlogPage(
+                                    entry: _entries[i],
+                                    onReadMore: () =>
+                                        _openDetail(context, _entries[i]),
+                                  ),
+                                ),
+                              ),
+                              _DateNav(
+                                entries: _entries,
+                                current: _currentPage,
+                                onPrev: () => _goPage(_currentPage - 1),
+                                onNext: () => _goPage(_currentPage + 1),
+                              ),
+                            ],
                           ),
-                        ),
-                        _DateNav(
-                          entries: _entries,
-                          current: _currentPage,
-                          onPrev: () => _goPage(_currentPage - 1),
-                          onNext: () => _goPage(_currentPage + 1),
-                        ),
-                      ],
-                    ),
-                    // Floating "Today" pill — visible only when away from today
-                    if (_currentPage > 0)
-                      Positioned(
-                        bottom: 72,
-                        left: 0,
-                        right: 0,
-                        child: Center(child: _TodayPill(onTap: _goToday)),
+                          // Floating "Today" pill — visible only when away from today
+                          if (_currentPage > 0)
+                            Positioned(
+                              bottom: 72,
+                              left: 0,
+                              right: 0,
+                              child: Center(child: _TodayPill(onTap: _goToday)),
+                            ),
+                        ],
                       ),
-                  ],
-                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

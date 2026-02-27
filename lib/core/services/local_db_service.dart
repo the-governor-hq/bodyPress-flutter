@@ -87,7 +87,15 @@ class LocalDbService {
     }
     if (oldVersion < 3) {
       // v2 → v3: add user_mood column
-      await db.execute('ALTER TABLE $_tableEntries ADD COLUMN user_mood TEXT');
+      // Guard against duplicate-column errors if the column was already
+      // present from a partially-applied migration or a hot-restart.
+      try {
+        await db.execute(
+          'ALTER TABLE $_tableEntries ADD COLUMN user_mood TEXT',
+        );
+      } catch (e) {
+        if (!e.toString().toLowerCase().contains('duplicate column')) rethrow;
+      }
     }
   }
 
