@@ -1,23 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/models/capture_entry.dart';
-import '../../../core/services/capture_service.dart';
+import '../../../core/services/service_providers.dart';
 
 /// Capture tab — comprehensive data capture for AI analysis.
 /// Zen, minimalist design inspired by BodyBlog.
-class CaptureScreen extends StatefulWidget {
+class CaptureScreen extends ConsumerStatefulWidget {
   const CaptureScreen({super.key});
 
   @override
-  State<CaptureScreen> createState() => _CaptureScreenState();
+  ConsumerState<CaptureScreen> createState() => _CaptureScreenState();
 }
 
-class _CaptureScreenState extends State<CaptureScreen>
+class _CaptureScreenState extends ConsumerState<CaptureScreen>
     with SingleTickerProviderStateMixin {
-  final CaptureService _captureService = CaptureService();
+  late final _captureService = ref.read(captureServiceProvider);
   final TextEditingController _noteController = TextEditingController();
   final TextEditingController _moodController = TextEditingController();
 

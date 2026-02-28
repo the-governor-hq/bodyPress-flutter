@@ -53,10 +53,11 @@ lib/
 │   ├── router/
 │   │   └── app_router.dart               # GoRouter config (3-tab shell + standalone routes)
 │   ├── services/
+│   │   ├── service_providers.dart        # ★ Central Riverpod provider registry (one singleton per service)
 │   │   ├── body_blog_service.dart        # Smart refresh orchestrator — instant / incremental / cold-start
 │   │   ├── journal_ai_service.dart       # Prompt building + AI call + JSON parsing → JournalAiResult
 │   │   ├── ai_service.dart               # HTTP client for ai.governor-hq.com
-│   │   ├── ai_service_provider.dart      # Riverpod provider for AiService
+│   │   ├── ai_service_provider.dart      # Riverpod provider for AiService (re-exported by service_providers)
 │   │   ├── local_db_service.dart         # SQLite (sqflite) — entries, captures, settings
 │   │   ├── capture_service.dart          # Multi-source data collection → CaptureEntry
 │   │   ├── background_capture_service.dart # WorkManager scheduler (quiet hours, battery-aware)
@@ -89,7 +90,8 @@ lib/
 
 ### Key abstractions
 
-- **`BodyBlogService`** — Orchestrates data collection, AI enrichment, and persistence for daily journal entries. Uses a **smart refresh** strategy: returns persisted entries instantly when no new data exists, runs AI only when unprocessed captures are available, and supports explicit full refresh via user action.
+- **`service_providers.dart`** — Single import for all Riverpod providers. Every service is exposed as a `Provider<T>` singleton within the `ProviderScope`. All screens use `ref.read(someServiceProvider)` instead of constructing services directly, which (a) guarantees a single SQLite connection from `localDbServiceProvider`, (b) makes every service replaceable with a fake in tests, and (c) removes scattered state.
+- **`BodyBlogService`** — Orchestrates data collection, AI enrichment, and persistence for daily journal entries. Uses a **smart refresh** strategy: returns persisted entries instantly when no new data exists, runs AI only when unprocessed captures are available, and supports explicit full refresh via user action. All internal dependencies are constructor-injected.
 - **`JournalAiService`** — Builds a structured prompt from the day's `CaptureEntry` list (preferred) or a `BodySnapshot` (fallback), calls `AiService`, and parses the model's JSON response into a `JournalAiResult`.
 - **`JournalAiResult`** — Parsed AI output: `headline`, `summary`, `fullBody`, `mood`, `moodEmoji`, `tags`.
 - **`BodyBlogEntry`** — Immutable value object containing date, headline, summary, full body text, mood, tags, optional user note, optional user mood emoji, `aiGenerated` flag, and the raw `BodySnapshot`.

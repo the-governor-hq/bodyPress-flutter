@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -11,38 +12,31 @@ import '../../core/models/ai_models.dart';
 import '../../core/models/background_capture_config.dart';
 import '../../core/models/body_blog_entry.dart';
 import '../../core/models/capture_entry.dart';
-import '../../core/services/ai_service.dart';
-import '../../core/services/background_capture_service.dart';
-import '../../core/services/body_blog_service.dart';
-import '../../core/services/capture_service.dart';
-import '../../core/services/context_window_service.dart';
-import '../../core/services/health_service.dart';
 import '../../core/services/local_db_service.dart';
-import '../../core/services/notification_service.dart';
-import '../../core/services/permission_service.dart';
+import '../../core/services/service_providers.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  DEBUG PANEL
 //  Full-spectrum diagnostics: permissions · db · health · context · actions
 // ─────────────────────────────────────────────────────────────────────────────
 
-class DebugScreen extends StatefulWidget {
+class DebugScreen extends ConsumerStatefulWidget {
   const DebugScreen({super.key});
 
   @override
-  State<DebugScreen> createState() => _DebugScreenState();
+  ConsumerState<DebugScreen> createState() => _DebugScreenState();
 }
 
-class _DebugScreenState extends State<DebugScreen> {
+class _DebugScreenState extends ConsumerState<DebugScreen> {
   // ── services ──────────────────────────────────────────
-  final _db = LocalDbService();
-  final _health = HealthService();
-  final _permissions = PermissionService();
-  final _context = ContextWindowService();
-  final _blog = BodyBlogService();
-  final _ai = AiService();
-  final _bgCapture = BackgroundCaptureService();
-  final _captureService = CaptureService();
+  late final _db = ref.read(localDbServiceProvider);
+  late final _health = ref.read(healthServiceProvider);
+  late final _permissions = ref.read(permissionServiceProvider);
+  late final _context = ref.read(contextWindowServiceProvider);
+  late final _blog = ref.read(bodyBlogServiceProvider);
+  late final _ai = ref.read(aiServiceProvider);
+  late final _bgCapture = ref.read(backgroundCaptureServiceProvider);
+  late final _captureService = ref.read(captureServiceProvider);
 
   // ── state ──────────────────────────────────────────────
   bool _loading = true;
@@ -376,7 +370,7 @@ class _DebugScreenState extends State<DebugScreen> {
   }
 
   Future<void> _requestNotificationPermission() async {
-    final notifService = NotificationService();
+    final notifService = ref.read(notificationServiceProvider);
     await notifService.initialize();
     final granted = await notifService.requestPermission();
     _setActionMsg(

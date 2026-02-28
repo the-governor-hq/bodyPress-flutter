@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/services/health_service.dart';
-import '../../../core/services/permission_service.dart';
+import '../../../core/services/service_providers.dart';
 
-class PermissionsScreen extends StatefulWidget {
+class PermissionsScreen extends ConsumerStatefulWidget {
   const PermissionsScreen({super.key});
 
   @override
-  State<PermissionsScreen> createState() => _PermissionsScreenState();
+  ConsumerState<PermissionsScreen> createState() => _PermissionsScreenState();
 }
 
-class _PermissionsScreenState extends State<PermissionsScreen> {
-  final PermissionService _permissionService = PermissionService();
-  final HealthService _healthService = HealthService();
+class _PermissionsScreenState extends ConsumerState<PermissionsScreen> {
+  late final _permissionService = ref.read(permissionServiceProvider);
+  late final _healthService = ref.read(healthServiceProvider);
   bool _isLoading = false;
 
   final List<PermissionItem> _permissions = [

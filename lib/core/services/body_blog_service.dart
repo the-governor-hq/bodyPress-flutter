@@ -16,12 +16,26 @@ import 'location_service.dart';
 /// version this will call an LLM endpoint (OpenAI / Gemini / local model)
 /// with the [BodySnapshot] as structured context.
 class BodyBlogService {
-  final HealthService _health = HealthService();
-  final LocationService _location = LocationService();
-  final CalendarService _calendar = CalendarService();
-  final AmbientScanService _ambient = AmbientScanService();
-  final LocalDbService _db = LocalDbService();
-  final JournalAiService _ai = JournalAiService();
+  final HealthService _health;
+  final LocationService _location;
+  final CalendarService _calendar;
+  final AmbientScanService _ambient;
+  final LocalDbService _db;
+  final JournalAiService _ai;
+
+  BodyBlogService({
+    HealthService? health,
+    LocationService? location,
+    CalendarService? calendar,
+    AmbientScanService? ambient,
+    LocalDbService? db,
+    JournalAiService? ai,
+  }) : _health = health ?? HealthService(),
+       _location = location ?? LocationService(),
+       _calendar = calendar ?? CalendarService(),
+       _ambient = ambient ?? AmbientScanService(),
+       _db = db ?? LocalDbService(),
+       _ai = ai ?? JournalAiService();
 
   // ── public API ──────────────────────────────────────────────────
 
