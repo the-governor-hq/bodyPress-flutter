@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
 import '../models/body_blog_entry.dart';
@@ -108,7 +109,9 @@ class JournalAiService {
       final cleaned = _stripMarkdownFences(raw.trim());
       final json = jsonDecode(cleaned) as Map<String, dynamic>;
       return JournalAiResult.fromJson(json);
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[JournalAiService] generation failed: $e');
+      debugPrint('$st');
       return null;
     }
   }

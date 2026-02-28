@@ -1,4 +1,5 @@
 import 'package:device_calendar/device_calendar.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/body_blog_entry.dart';
 import '../models/capture_entry.dart';
@@ -238,7 +239,9 @@ class BodyBlogService {
         tags: result.tags,
         aiGenerated: true,
       );
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[BodyBlogService] AI enrichment failed: $e');
+      debugPrint('$st');
       return entry;
     }
   }
@@ -516,11 +519,6 @@ class BodyBlogService {
 
   String _buildBody(BodySnapshot s, String mood) {
     final buf = StringBuffer();
-
-    // Opening
-    buf.writeln(
-      'You slept 6h 12m — about 58 minutes shorter than your 14-day average.\n',
-    );
 
     // Sleep section
     if (s.sleepHours > 0) {
