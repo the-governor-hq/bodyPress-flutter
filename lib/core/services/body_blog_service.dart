@@ -30,13 +30,13 @@ class BodyBlogService {
     CalendarService? calendar,
     AmbientScanService? ambient,
     LocalDbService? db,
-    JournalAiService? ai,
+    required JournalAiService ai,
   }) : _health = health ?? HealthService(),
        _location = location ?? LocationService(),
        _calendar = calendar ?? CalendarService(),
        _ambient = ambient ?? AmbientScanService(),
        _db = db ?? LocalDbService(),
-       _ai = ai ?? JournalAiService();
+       _ai = ai;
 
   // ── public API ──────────────────────────────────────────────────
 

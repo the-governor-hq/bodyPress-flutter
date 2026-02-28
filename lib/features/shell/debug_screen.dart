@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../core/models/ai_mode_config.dart';
 import '../../core/models/ai_models.dart';
 import '../../core/models/background_capture_config.dart';
 import '../../core/models/body_blog_entry.dart';
@@ -71,6 +72,13 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
   String? _aiTestResponse;
   bool _aiTestRunning = false;
 
+  // Local LLM
+  AiModeConfig _aiModeConfig = const AiModeConfig();
+  bool _localLlmLoading = false;
+  String? _localLlmError;
+  String? _localTestResponse;
+  bool _localTestRunning = false;
+
   // Background captures
   BackgroundCaptureConfig _bgConfig = BackgroundCaptureConfig.defaultConfig;
   Map<String, String> _bgStats = {};
@@ -115,6 +123,7 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
       _loadHealth(),
       _loadContext(),
       _loadAi(),
+      _loadLocalLlm(),
       _loadBgCapture(),
       _loadDailyReminder(),
     ]);
@@ -247,6 +256,22 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
         _aiHealthy = false;
         _aiError = e.toString();
       });
+    }
+  }
+
+  Future<void> _loadLocalLlm() async {
+    try {
+      // Read the current mode config from the notifier.
+      final asyncCfg = ref.read(aiModeProvider);
+      if (asyncCfg.hasValue) {
+        if (mounted) setState(() => _aiModeConfig = asyncCfg.value!);
+      } else {
+        // Notifier hasn't built yet — trigger it and wait.
+        final cfg = await ref.read(aiModeProvider.future);
+        if (mounted) setState(() => _aiModeConfig = cfg);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _localLlmError = e.toString());
     }
   }
 
@@ -694,6 +719,27 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
                                   : (_aiHealthy! ? Colors.green : Colors.red),
                               errorText: _aiError,
                               child: _buildAiContent(dark),
+                            ),
+                            const SizedBox(height: 10),
+                            // ── local LLM
+                            _buildSection(
+                              key: 'localllm',
+                              title: 'Local LLM',
+                              icon: Icons.memory_outlined,
+                              accent: Colors.teal,
+                              dark: dark,
+                              surface: surface,
+                              dividerColor: dividerColor,
+                              badge: _aiModeConfig.isLocalMode
+                                  ? _aiModeConfig.modelStatus.name
+                                  : 'remote',
+                              badgeColor: _aiModeConfig.isLocalReady
+                                  ? Colors.green
+                                  : (_aiModeConfig.isLocalMode
+                                        ? Colors.orange
+                                        : Colors.grey),
+                              errorText: _localLlmError,
+                              child: _buildLocalLlmContent(dark),
                             ),
                             const SizedBox(height: 10),
                             // ── context window
@@ -1454,6 +1500,390 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
         ],
       ),
     );
+  }
+
+  // ─────────────────────── LOCAL LLM ───────────────────────
+
+  Widget _buildLocalLlmContent(bool dark) {
+    final mono = GoogleFonts.spaceMono(
+      fontSize: 11,
+      color: dark ? Colors.white60 : Colors.black54,
+    );
+    final label = GoogleFonts.spaceMono(
+      fontSize: 9,
+      color: dark ? Colors.white38 : Colors.black38,
+      letterSpacing: 0.6,
+    );
+
+    final cfg = _aiModeConfig;
+    final isLocal = cfg.isLocalMode;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Mode toggle ──
+          Row(
+            children: [
+              Text('MODE', style: label),
+              const Spacer(),
+              SegmentedButton<AiMode>(
+                segments: const [
+                  ButtonSegment(
+                    value: AiMode.remote,
+                    label: Text('Remote', style: TextStyle(fontSize: 11)),
+                    icon: Icon(Icons.cloud_outlined, size: 14),
+                  ),
+                  ButtonSegment(
+                    value: AiMode.local,
+                    label: Text('Local', style: TextStyle(fontSize: 11)),
+                    icon: Icon(Icons.memory_outlined, size: 14),
+                  ),
+                ],
+                selected: {cfg.mode},
+                onSelectionChanged: (sel) async {
+                  final notifier = ref.read(aiModeProvider.notifier);
+                  await notifier.setMode(sel.first);
+                  await _loadLocalLlm();
+                },
+                style: ButtonStyle(
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // ── Backend info ──
+          Text('BACKEND', style: label),
+          const SizedBox(height: 2),
+          SelectableText(
+            isLocal
+                ? cfg.backend.name.toUpperCase()
+                : 'ai.governor-hq.com (remote)',
+            style: mono,
+          ),
+          const SizedBox(height: 12),
+
+          // ── Model status ──
+          Text('MODEL', style: label),
+          const SizedBox(height: 2),
+          Row(
+            children: [
+              Icon(
+                _modelStatusIcon(cfg.modelStatus),
+                size: 14,
+                color: _modelStatusColor(cfg.modelStatus),
+              ),
+              const SizedBox(width: 6),
+              Expanded(child: Text(cfg.modelName ?? 'No model', style: mono)),
+              Text(
+                cfg.modelStatus.name,
+                style: mono.copyWith(color: _modelStatusColor(cfg.modelStatus)),
+              ),
+            ],
+          ),
+
+          // ── Download progress ──
+          if (cfg.modelStatus == LocalModelStatus.downloading) ...[
+            const SizedBox(height: 8),
+            LinearProgressIndicator(
+              value: cfg.downloadProgress,
+              backgroundColor: Colors.teal.withValues(alpha: 0.1),
+              color: Colors.teal,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${(cfg.downloadProgress * 100).toStringAsFixed(0)}%',
+              style: mono,
+            ),
+          ],
+
+          const SizedBox(height: 16),
+
+          // ── Actions ──
+          if (!isLocal) ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.teal.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.teal.withValues(alpha: 0.15)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, size: 14, color: Colors.teal),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Switch to Local mode to manage on-device models and run inference without network calls.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: dark ? Colors.white54 : Colors.black54,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          if (isLocal) ...[
+            // Download button (only when no model or after delete)
+            if (cfg.modelStatus == LocalModelStatus.notDownloaded ||
+                cfg.modelStatus == LocalModelStatus.error)
+              _actionButton(
+                label: 'Download model',
+                icon: Icons.download_outlined,
+                color: Colors.teal,
+                onTap: _localLlmLoading
+                    ? null
+                    : () async {
+                        setState(() => _localLlmLoading = true);
+                        await ref.read(aiModeProvider.notifier).downloadModel();
+                        await _loadLocalLlm();
+                        if (mounted) setState(() => _localLlmLoading = false);
+                      },
+              ),
+
+            // Activate button (after download)
+            if (cfg.modelStatus == LocalModelStatus.downloaded) ...[
+              _actionButton(
+                label: 'Activate model',
+                icon: Icons.play_circle_outline,
+                color: Colors.teal,
+                onTap: _localLlmLoading
+                    ? null
+                    : () async {
+                        setState(() => _localLlmLoading = true);
+                        await ref.read(aiModeProvider.notifier).activateModel();
+                        await _loadLocalLlm();
+                        if (mounted) setState(() => _localLlmLoading = false);
+                      },
+              ),
+              const SizedBox(height: 8),
+            ],
+
+            // Ready state — deactivate + delete + test
+            if (cfg.modelStatus == LocalModelStatus.ready) ...[
+              _actionButton(
+                label: 'Send local test prompt',
+                icon: Icons.send_outlined,
+                color: Colors.teal,
+                onTap: _localTestRunning ? null : _runLocalTest,
+              ),
+              const SizedBox(height: 8),
+              _actionButton(
+                label: 'Deactivate model',
+                icon: Icons.pause_circle_outline,
+                color: Colors.orange,
+                onTap: _localLlmLoading
+                    ? null
+                    : () async {
+                        setState(() => _localLlmLoading = true);
+                        await ref
+                            .read(aiModeProvider.notifier)
+                            .deactivateModel();
+                        await _loadLocalLlm();
+                        if (mounted) setState(() => _localLlmLoading = false);
+                      },
+              ),
+              const SizedBox(height: 8),
+            ],
+
+            // Delete available when model is on disk.
+            if (cfg.modelStatus == LocalModelStatus.downloaded ||
+                cfg.modelStatus == LocalModelStatus.ready)
+              _actionButton(
+                label: 'Delete model',
+                icon: Icons.delete_outline,
+                color: Colors.red,
+                destructive: true,
+                onTap: _localLlmLoading
+                    ? null
+                    : () async {
+                        setState(() => _localLlmLoading = true);
+                        await ref.read(aiModeProvider.notifier).deleteModel();
+                        await _loadLocalLlm();
+                        if (mounted) setState(() => _localLlmLoading = false);
+                      },
+              ),
+
+            // Hard-fail notice
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.15)),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.wifi_off_outlined,
+                    size: 14,
+                    color: Colors.red.shade300,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Local mode: all AI requests stay on-device. '
+                      'No fallback to remote API — requests fail if model is not ready.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: dark ? Colors.white54 : Colors.black54,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // ── Loading spinner ──
+          if (_localLlmLoading) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 1.5),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Working...',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: dark ? Colors.white38 : Colors.black38,
+                  ),
+                ),
+              ],
+            ),
+          ],
+
+          // ── Local test response ──
+          if (_localTestRunning) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 1.5),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Running local inference...',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: dark ? Colors.white38 : Colors.black38,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (_localTestResponse != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: dark
+                    ? Colors.teal.withValues(alpha: 0.1)
+                    : Colors.teal.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.teal.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.memory, size: 13, color: Colors.teal),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Local Response',
+                        style: GoogleFonts.spaceMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.teal,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SelectableText(
+                    _localTestResponse!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.5,
+                      color: dark ? Colors.white70 : Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _runLocalTest() async {
+    setState(() {
+      _localTestRunning = true;
+      _localTestResponse = null;
+    });
+    try {
+      final router = ref.read(aiRouterProvider);
+      final response = await router.local.ask(
+        'Respond with exactly one encouraging sentence about fitness.',
+        temperature: 0.7,
+      );
+      setState(() {
+        _localTestResponse = response;
+      });
+    } on AiServiceException catch (e) {
+      setState(() => _localTestResponse = 'Error: ${e.message}');
+    } catch (e) {
+      setState(() => _localTestResponse = 'Unexpected error: $e');
+    } finally {
+      if (mounted) setState(() => _localTestRunning = false);
+    }
+  }
+
+  IconData _modelStatusIcon(LocalModelStatus s) {
+    switch (s) {
+      case LocalModelStatus.notDownloaded:
+        return Icons.cloud_download_outlined;
+      case LocalModelStatus.downloading:
+        return Icons.downloading;
+      case LocalModelStatus.downloaded:
+        return Icons.check_circle_outline;
+      case LocalModelStatus.ready:
+        return Icons.check_circle;
+      case LocalModelStatus.error:
+        return Icons.error_outline;
+    }
+  }
+
+  Color _modelStatusColor(LocalModelStatus s) {
+    switch (s) {
+      case LocalModelStatus.notDownloaded:
+        return Colors.grey;
+      case LocalModelStatus.downloading:
+        return Colors.blue;
+      case LocalModelStatus.downloaded:
+        return Colors.orange;
+      case LocalModelStatus.ready:
+        return Colors.green;
+      case LocalModelStatus.error:
+        return Colors.red;
+    }
   }
 
   // ─────────────────────── CONTEXT WINDOW ───────────────────────

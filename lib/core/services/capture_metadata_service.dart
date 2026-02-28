@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/capture_ai_metadata.dart';
 import '../models/capture_entry.dart';
-import 'ai_service.dart';
+import 'ai_router.dart';
 import 'local_db_service.dart';
 
 /// Background service that generates [CaptureAiMetadata] for every new capture.
@@ -16,10 +16,10 @@ import 'local_db_service.dart';
 ///
 /// Processing is idempotent: captures that already have metadata are skipped.
 class CaptureMetadataService {
-  final AiService _ai;
+  final AiRouter _ai;
   final LocalDbService _db;
 
-  CaptureMetadataService({required AiService ai, required LocalDbService db})
+  CaptureMetadataService({required AiRouter ai, required LocalDbService db})
     : _ai = ai,
       _db = db;
 

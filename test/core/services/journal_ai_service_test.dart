@@ -3,8 +3,10 @@ import 'dart:convert';
 import 'package:bodypress_flutter/core/models/ai_models.dart';
 import 'package:bodypress_flutter/core/models/body_blog_entry.dart';
 import 'package:bodypress_flutter/core/models/capture_entry.dart';
+import 'package:bodypress_flutter/core/services/ai_router.dart';
 import 'package:bodypress_flutter/core/services/ai_service.dart';
 import 'package:bodypress_flutter/core/services/journal_ai_service.dart';
+import 'package:bodypress_flutter/core/services/local_ai_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -32,6 +34,10 @@ class _FakeAiService extends AiService {
     return response ?? '';
   }
 }
+
+/// Wrap a fake [AiService] in an [AiRouter] for test injection.
+AiRouter _fakeRouter(AiService fake) =>
+    AiRouter(remote: fake, local: LocalAiService());
 
 void main() {
   // ─── JournalAiResult.fromJson ─────────────────────────────────────────────
@@ -94,13 +100,13 @@ void main() {
 
   group('JournalAiService.generate', () {
     test('returns null when no captures and no snapshot', () async {
-      final service = JournalAiService(ai: _FakeAiService());
+      final service = JournalAiService(ai: _fakeRouter(_FakeAiService()));
       final result = await service.generate(DateTime.now(), []);
       expect(result, isNull);
     });
 
     test('returns null when snapshot has no data', () async {
-      final service = JournalAiService(ai: _FakeAiService());
+      final service = JournalAiService(ai: _fakeRouter(_FakeAiService()));
       final result = await service.generate(
         DateTime.now(),
         [],
@@ -120,7 +126,7 @@ void main() {
       });
 
       final service = JournalAiService(
-        ai: _FakeAiService(response: aiResponse),
+        ai: _fakeRouter(_FakeAiService(response: aiResponse)),
       );
 
       final captures = [
@@ -153,7 +159,7 @@ void main() {
       });
 
       final service = JournalAiService(
-        ai: _FakeAiService(response: aiResponse),
+        ai: _fakeRouter(_FakeAiService(response: aiResponse)),
       );
 
       final result = await service.generate(
@@ -168,7 +174,7 @@ void main() {
 
     test('returns null when AI throws', () async {
       final service = JournalAiService(
-        ai: _FakeAiService(shouldThrow: true),
+        ai: _fakeRouter(_FakeAiService(shouldThrow: true)),
       );
 
       final captures = [
@@ -185,7 +191,7 @@ void main() {
 
     test('returns null when AI returns invalid JSON', () async {
       final service = JournalAiService(
-        ai: _FakeAiService(response: 'not json at all'),
+        ai: _fakeRouter(_FakeAiService(response: 'not json at all')),
       );
 
       final captures = [
@@ -212,7 +218,7 @@ void main() {
       final fencedResponse = '```json\n$jsonContent\n```';
 
       final service = JournalAiService(
-        ai: _FakeAiService(response: fencedResponse),
+        ai: _fakeRouter(_FakeAiService(response: fencedResponse)),
       );
 
       final captures = [
@@ -243,7 +249,7 @@ void main() {
         onPrompt: (p) => capturedPrompt = p,
       );
 
-      final service = JournalAiService(ai: aiService);
+      final service = JournalAiService(ai: _fakeRouter(aiService));
       final captures = [
         CaptureEntry(
           id: 'c1',

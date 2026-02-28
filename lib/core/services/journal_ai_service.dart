@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../models/body_blog_entry.dart';
 import '../models/capture_entry.dart';
-import 'ai_service.dart';
+import 'ai_router.dart';
 
 /// The result of an AI-powered journal generation.
 class JournalAiResult {
@@ -58,9 +58,9 @@ class JournalAiResult {
 ///
 /// Calls ai.governor-hq.com and expects the model to return clean JSON.
 class JournalAiService {
-  final AiService _ai;
+  final AiRouter _ai;
 
-  JournalAiService({AiService? ai}) : _ai = ai ?? AiService();
+  JournalAiService({required AiRouter ai}) : _ai = ai;
 
   // ── public API ────────────────────────────────────────────────────────────
 

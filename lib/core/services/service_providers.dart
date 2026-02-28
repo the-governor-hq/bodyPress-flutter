@@ -17,8 +17,9 @@ import 'location_service.dart';
 import 'notification_service.dart';
 import 'permission_service.dart';
 
+export 'ai_mode_provider.dart' show aiModeProvider;
 // Re-export so callers only need to import this one file.
-export 'ai_service_provider.dart' show aiServiceProvider;
+export 'ai_service_provider.dart' show aiServiceProvider, aiRouterProvider;
 
 // ── Infrastructure ──────────────────────────────────────────────────────────
 
@@ -67,7 +68,7 @@ final gpsMetricsServiceProvider = Provider<GpsMetricsService>((ref) {
 // ── Composite services ──────────────────────────────────────────────────────
 
 final journalAiServiceProvider = Provider<JournalAiService>((ref) {
-  return JournalAiService(ai: ref.read(aiServiceProvider));
+  return JournalAiService(ai: ref.read(aiRouterProvider));
 });
 
 final contextWindowServiceProvider = Provider<ContextWindowService>((ref) {
@@ -87,7 +88,7 @@ final captureServiceProvider = Provider<CaptureService>((ref) {
 
 final captureMetadataServiceProvider = Provider<CaptureMetadataService>((ref) {
   return CaptureMetadataService(
-    ai: ref.read(aiServiceProvider),
+    ai: ref.read(aiRouterProvider),
     db: ref.read(localDbServiceProvider),
   );
 });
