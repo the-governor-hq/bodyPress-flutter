@@ -12,22 +12,26 @@ void main() {
   group('AppTheme', () {
     // ── Color constants ──
 
+    // ── Midnight Ocean palette ──
     test('primary and accent colors are defined', () {
-      expect(AppTheme.primaryColor, const Color(0xFF6C63FF));
-      expect(AppTheme.accentColor, const Color(0xFFFF6584));
-      expect(AppTheme.successColor, const Color(0xFF4CAF50));
-      expect(AppTheme.warningColor, const Color(0xFFFFC107));
-      expect(AppTheme.errorColor, const Color(0xFFFF5252));
+      // Primary = moonlit teal glow
+      expect(AppTheme.primaryColor, const Color(0xFF4DD4C8));
+      // Accent = pale sky starlight
+      expect(AppTheme.accentColor, const Color(0xFFB0CCEF));
+      expect(AppTheme.successColor, const Color(0xFF38C87E));
+      expect(AppTheme.warningColor, const Color(0xFFFFBD5A));
+      expect(AppTheme.errorColor, const Color(0xFFFF5A7A));
     });
 
     test('background and surface colors are defined', () {
-      expect(AppTheme.backgroundColor, const Color(0xFF0F0F1E));
-      expect(AppTheme.surfaceColor, const Color(0xFF1A1A2E));
-      expect(AppTheme.cardColor, const Color(0xFF16213E));
+      expect(AppTheme.backgroundColor, const Color(0xFF0A0E1A));
+      expect(AppTheme.surfaceColor, const Color(0xFF101625));
+      expect(AppTheme.cardColor, const Color(0xFF172036));
     });
 
     test('secondary color is defined', () {
-      expect(AppTheme.secondaryColor, const Color(0xFF5C54FF));
+      // Secondary = amethyst aurora
+      expect(AppTheme.secondaryColor, const Color(0xFF8B78F5));
     });
   });
 }
