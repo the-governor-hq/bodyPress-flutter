@@ -11,7 +11,7 @@ import '../../features/shell/debug_screen.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
-    initialLocation: '/journal',
+    initialLocation: '/onboarding',
     routes: [
       // ── Onboarding (no bottom nav) ──────────────────────────────────
       GoRoute(
