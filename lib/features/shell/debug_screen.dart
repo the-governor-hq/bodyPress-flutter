@@ -13,6 +13,7 @@ import '../../core/models/background_capture_config.dart';
 import '../../core/models/body_blog_entry.dart';
 import '../../core/models/capture_entry.dart';
 import '../../core/services/local_db_service.dart';
+import '../../core/services/notification_service.dart';
 import '../../core/services/service_providers.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -37,6 +38,7 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
   late final _ai = ref.read(aiServiceProvider);
   late final _bgCapture = ref.read(backgroundCaptureServiceProvider);
   late final _captureService = ref.read(captureServiceProvider);
+  late final _notifService = ref.read(notificationServiceProvider);
 
   // ── state ──────────────────────────────────────────────
   bool _loading = true;
@@ -77,6 +79,10 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
   List<CaptureEntry> _recentCaptures = [];
   bool _bgTriggerRunning = false;
 
+  // Daily notification
+  bool _dailyReminderEnabled = false;
+  TimeOfDay _dailyReminderTime = const TimeOfDay(hour: 9, minute: 0);
+
   // Errors per section
   String? _permError;
   String? _dbError;
@@ -110,6 +116,7 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
       _loadContext(),
       _loadAi(),
       _loadBgCapture(),
+      _loadDailyReminder(),
     ]);
     if (mounted) setState(() => _loading = false);
   }
@@ -269,6 +276,89 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
   }
 
   // ── actions ───────────────────────────────────────────
+
+  Future<void> _loadDailyReminder() async {
+    try {
+      final timeSetting = await _db.getSetting('daily_reminder_time');
+      if (mounted) {
+        if (timeSetting != null && timeSetting.isNotEmpty) {
+          final parts = timeSetting.split(':');
+          if (parts.length == 2) {
+            final h = int.tryParse(parts[0]) ?? 9;
+            final m = int.tryParse(parts[1]) ?? 0;
+            setState(() {
+              _dailyReminderEnabled = true;
+              _dailyReminderTime = TimeOfDay(hour: h, minute: m);
+            });
+          }
+        } else {
+          setState(() => _dailyReminderEnabled = false);
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _toggleDailyReminder() async {
+    if (_dailyReminderEnabled) {
+      // Disable
+      await _notifService.cancelDailyReminder();
+      await _db.setSetting('daily_reminder_time', '');
+      // Remove the setting by writing empty; on reload it acts as disabled.
+      // Actually let's truly remove it by overwriting, but our getSetting
+      // returns the raw string. We'll check for empty too.
+      _setActionMsg('Daily reminder disabled.');
+    } else {
+      // Enable with current time
+      await _notifService.initialize();
+      await _notifService.scheduleDailyReminder(
+        hour: _dailyReminderTime.hour,
+        minute: _dailyReminderTime.minute,
+      );
+      await _db.setSetting(
+        'daily_reminder_time',
+        '${_dailyReminderTime.hour}:${_dailyReminderTime.minute}',
+      );
+      _setActionMsg(
+        'Daily reminder enabled at '
+        '${_dailyReminderTime.hour.toString().padLeft(2, '0')}:'
+        '${_dailyReminderTime.minute.toString().padLeft(2, '0')}.',
+      );
+    }
+    await _loadDailyReminder();
+  }
+
+  Future<void> _pickDailyReminderTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _dailyReminderTime,
+      helpText: 'Daily notification time',
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() => _dailyReminderTime = picked);
+
+    if (_dailyReminderEnabled) {
+      await _notifService.scheduleDailyReminder(
+        hour: picked.hour,
+        minute: picked.minute,
+      );
+      await _db.setSetting(
+        'daily_reminder_time',
+        '${picked.hour}:${picked.minute}',
+      );
+      _setActionMsg(
+        'Reminder rescheduled to '
+        '${picked.hour.toString().padLeft(2, '0')}:'
+        '${picked.minute.toString().padLeft(2, '0')}.',
+      );
+    }
+  }
+
+  Future<void> _sendTestDailyNotification() async {
+    await _notifService.initialize();
+    await _notifService.showTestDailyReminder();
+    _setActionMsg('Test daily notification sent.');
+  }
 
   Future<void> _toggleBgCapture() async {
     setState(() => _actionRunning = true);
@@ -635,6 +725,24 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
                                   : Colors.grey,
                               errorText: _bgCaptureError,
                               child: _buildBgCaptureContent(dark),
+                            ),
+                            const SizedBox(height: 10),
+                            // ── daily notifications
+                            _buildSection(
+                              key: 'dailynotif',
+                              title: 'Daily Notifications',
+                              icon: Icons.notifications_none_rounded,
+                              accent: const Color(0xFFA68BC1),
+                              dark: dark,
+                              surface: surface,
+                              dividerColor: dividerColor,
+                              badge: _dailyReminderEnabled
+                                  ? 'enabled'
+                                  : 'disabled',
+                              badgeColor: _dailyReminderEnabled
+                                  ? Colors.green
+                                  : Colors.grey,
+                              child: _buildDailyNotifContent(dark),
                             ),
                             const SizedBox(height: 10),
                             // ── recent entries
@@ -1905,6 +2013,161 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
             ),
           ),
           _chip(sourceLabel, sourceColor),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────── DAILY NOTIFICATIONS ───────────────────────
+
+  Widget _buildDailyNotifContent(bool dark) {
+    final timeStr =
+        '${_dailyReminderTime.hour.toString().padLeft(2, '0')}:'
+        '${_dailyReminderTime.minute.toString().padLeft(2, '0')}';
+    const accent = Color(0xFFA68BC1);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Status
+          Row(
+            children: [
+              Icon(
+                _dailyReminderEnabled
+                    ? Icons.check_circle
+                    : Icons.circle_outlined,
+                size: 16,
+                color: _dailyReminderEnabled ? Colors.green : Colors.grey,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _dailyReminderEnabled
+                    ? 'Daily body blog push is active'
+                    : 'Daily notification is off',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: dark ? Colors.white70 : Colors.black.withOpacity(0.7),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Time display & picker
+          Row(
+            children: [
+              Text(
+                'SCHEDULED TIME',
+                style: GoogleFonts.spaceMono(
+                  fontSize: 9,
+                  color: dark ? Colors.white38 : Colors.black38,
+                  letterSpacing: 0.6,
+                ),
+              ),
+              const SizedBox(width: 10),
+              GestureDetector(
+                onTap: _pickDailyReminderTime,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: accent.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.access_time, size: 13, color: accent),
+                      const SizedBox(width: 6),
+                      Text(
+                        timeStr,
+                        style: GoogleFonts.spaceMono(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: accent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Sample message preview
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: dark
+                  ? accent.withValues(alpha: 0.08)
+                  : accent.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: accent.withValues(alpha: 0.2)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.format_quote, size: 12, color: accent),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Sample message',
+                      style: GoogleFonts.spaceMono(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: accent,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  NotificationService.dailyMessages.first.title,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: dark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  NotificationService.dailyMessages.first.body,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: dark ? Colors.white54 : Colors.black45,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Actions
+          _actionButton(
+            label: _dailyReminderEnabled
+                ? 'Disable daily reminder'
+                : 'Enable daily reminder',
+            icon: _dailyReminderEnabled
+                ? Icons.notifications_off_outlined
+                : Icons.notifications_active_outlined,
+            color: _dailyReminderEnabled ? Colors.orange : Colors.green,
+            onTap: _toggleDailyReminder,
+          ),
+          const SizedBox(height: 8),
+          _actionButton(
+            label: 'Send test notification now',
+            icon: Icons.send_outlined,
+            color: accent,
+            onTap: _sendTestDailyNotification,
+          ),
         ],
       ),
     );

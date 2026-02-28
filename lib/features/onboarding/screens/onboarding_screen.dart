@@ -21,20 +21,24 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
     with TickerProviderStateMixin {
-  // 5 pages: welcome · location · health · calendar · complete
-  static const _totalPages = 5;
-  static const _permSteps = 3;
+  // 6 pages: welcome · location · health · calendar · notifications · complete
+  static const _totalPages = 6;
+  static const _permSteps = 4;
 
   final _pageCtrl = PageController();
   late final _permissionService = ref.read(permissionServiceProvider);
   late final _healthService = ref.read(healthServiceProvider);
   late final _dbService = ref.read(localDbServiceProvider);
+  late final _notifService = ref.read(notificationServiceProvider);
 
   int _page = 0;
   bool _busy = false;
 
   /// null = not requested yet  |  true = granted  |  false = denied / skipped
   bool? _healthGranted;
+
+  /// Selected daily notification time — defaults to 9:00 AM.
+  TimeOfDay _notifTime = const TimeOfDay(hour: 9, minute: 0);
 
   late final AnimationController _breathe;
 
@@ -152,6 +156,35 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
     _next();
   }
 
+  Future<void> _enableDailyReminder() async {
+    setState(() => _busy = true);
+    try {
+      await _notifService.initialize();
+      await _notifService.requestPermission();
+      await _notifService.scheduleDailyReminder(
+        hour: _notifTime.hour,
+        minute: _notifTime.minute,
+      );
+      await _dbService.setSetting(
+        'daily_reminder_time',
+        '${_notifTime.hour}:${_notifTime.minute}',
+      );
+    } catch (_) {}
+    if (mounted) setState(() => _busy = false);
+    _next();
+  }
+
+  Future<void> _pickNotifTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _notifTime,
+      helpText: 'When should your body check in?',
+    );
+    if (picked != null && mounted) {
+      setState(() => _notifTime = picked);
+    }
+  }
+
   // ── build ─────────────────────────────────────────────────────
 
   @override
@@ -236,6 +269,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
                           'nothing is modified, copied, or shared.',
                       ctaLabel: 'Allow Calendar',
                       onAllow: _requestCalendar,
+                      onSkip: _next,
+                      busy: _busy,
+                      breathe: _breathe,
+                    ),
+                    _NotificationStep(
+                      accent: const Color(0xFFA68BC1),
+                      selectedTime: _notifTime,
+                      onPickTime: _pickNotifTime,
+                      onEnable: _enableDailyReminder,
                       onSkip: _next,
                       busy: _busy,
                       breathe: _breathe,
@@ -1073,6 +1115,211 @@ class _OsBadge extends StatelessWidget {
                   color: accent,
                 ),
               ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  NOTIFICATION STEP — daily body-blog push
+// ═════════════════════════════════════════════════════════════════════════════
+
+class _NotificationStep extends StatelessWidget {
+  const _NotificationStep({
+    required this.accent,
+    required this.selectedTime,
+    required this.onPickTime,
+    required this.onEnable,
+    required this.onSkip,
+    required this.busy,
+    required this.breathe,
+  });
+
+  final Color accent;
+  final TimeOfDay selectedTime;
+  final VoidCallback onPickTime;
+  final VoidCallback onEnable;
+  final VoidCallback onSkip;
+  final bool busy;
+  final AnimationController breathe;
+
+  String get _formattedTime {
+    final h = selectedTime.hourOfPeriod == 0 ? 12 : selectedTime.hourOfPeriod;
+    final m = selectedTime.minute.toString().padLeft(2, '0');
+    final period = selectedTime.period == DayPeriod.am ? 'AM' : 'PM';
+    return '$h:$m $period';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              children: [
+                const SizedBox(height: 36),
+
+                _ZenOrb(
+                  size: 140,
+                  color: accent,
+                  breathe: breathe,
+                  child: Icon(
+                    Icons.notifications_none_rounded,
+                    size: 42,
+                    color: accent,
+                  ),
+                ),
+
+                const SizedBox(height: 36),
+
+                Text(
+                  'Daily\nBody Post',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.playfairDisplay(
+                    fontSize: 34,
+                    fontWeight: FontWeight.w700,
+                    height: 1.2,
+                    color: dark ? Colors.white : Colors.black87,
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
+                Text(
+                  'GENTLE DAILY REMINDER',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 2.0,
+                    color: accent.withValues(alpha: 0.8),
+                  ),
+                ),
+
+                const SizedBox(height: 28),
+
+                Text(
+                  'Your body writes a new story every day. '
+                  'A quiet notification will let you know when '
+                  'it\'s ready to read.\n\n'
+                  'Choose a time that fits your natural rhythm — '
+                  'morning, evening, or anywhere in between.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    height: 1.75,
+                    fontWeight: FontWeight.w300,
+                    color: dark ? Colors.white60 : Colors.black54,
+                  ),
+                ),
+
+                const SizedBox(height: 28),
+
+                // ── Time picker button ──
+                GestureDetector(
+                  onTap: onPickTime,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 16,
+                    ),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: accent.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.access_time_rounded,
+                          size: 20,
+                          color: accent,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          _formattedTime,
+                          style: GoogleFonts.inter(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w600,
+                            color: accent,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Icon(
+                          Icons.edit_outlined,
+                          size: 16,
+                          color: accent.withValues(alpha: 0.6),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
+                Text(
+                  'Tap to change',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.grey[500],
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                _PrivacyNote(
+                  text:
+                      'One gentle push per day, nothing more. '
+                      'You can change the time or turn it off anytime '
+                      'in the debug panel.',
+                  accent: accent,
+                ),
+
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+        ),
+
+        // ── pinned buttons ──
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            children: [
+              _PillButton(
+                label: 'Enable Daily Reminder',
+                color: accent,
+                onPressed: busy ? null : onEnable,
+                busy: busy,
+              ),
+              const SizedBox(height: 14),
+              GestureDetector(
+                onTap: busy ? null : onSkip,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    'Not now',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.grey[500],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 28),
             ],
           ),
         ),
