@@ -30,10 +30,7 @@ class BackgroundCaptureService {
   /// previously enabled background captures, re-registers the periodic task
   /// so it survives app updates and reboots.
   Future<void> initialize() async {
-    await Workmanager().initialize(
-      _workmanagerCallbackDispatcher,
-      isInDebugMode: false,
-    );
+    await Workmanager().initialize(_workmanagerCallbackDispatcher);
 
     // Re-register if previously enabled
     final config = await loadConfig();
