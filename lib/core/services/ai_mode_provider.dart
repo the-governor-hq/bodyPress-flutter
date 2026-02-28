@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/ai_mode_config.dart';
@@ -24,6 +25,7 @@ class AiModeNotifier extends AsyncNotifier<AiModeConfig> {
   late final LocalDbService _db;
 
   LocalAiService get _local => _router.local;
+  bool get _isIos => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
   // ── Initialisation ─────────────────────────────────────────────────────────
 
@@ -34,7 +36,11 @@ class AiModeNotifier extends AsyncNotifier<AiModeConfig> {
 
     // Restore persisted mode.
     final savedMode = await _db.getSetting(AiModeConfig.kModeKey);
-    final mode = savedMode == 'local' ? AiMode.local : AiMode.remote;
+    final requestedMode = savedMode == 'local' ? AiMode.local : AiMode.remote;
+    final mode = _isIos ? AiMode.remote : requestedMode;
+    if (mode != requestedMode) {
+      await _db.setSetting(AiModeConfig.kModeKey, mode.name);
+    }
     _router.mode = mode;
 
     // Probe local backend if in local mode.
@@ -49,12 +55,13 @@ class AiModeNotifier extends AsyncNotifier<AiModeConfig> {
 
   /// Switch between remote and local mode. Persists the choice.
   Future<void> setMode(AiMode mode) async {
-    await _db.setSetting(AiModeConfig.kModeKey, mode.name);
-    _router.mode = mode;
-    if (mode == AiMode.local) {
+    final effectiveMode = _isIos ? AiMode.remote : mode;
+    await _db.setSetting(AiModeConfig.kModeKey, effectiveMode.name);
+    _router.mode = effectiveMode;
+    if (effectiveMode == AiMode.local) {
       await _local.resolveBackend();
     }
-    state = AsyncData(_local.toConfig(mode));
+    state = AsyncData(_local.toConfig(effectiveMode));
   }
 
   /// Download (or verify) a local model.

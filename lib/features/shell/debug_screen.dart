@@ -1517,6 +1517,7 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
 
     final cfg = _aiModeConfig;
     final isLocal = cfg.isLocalMode;
+    final isIos = Platform.isIOS;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
@@ -1529,17 +1530,18 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
               Text('MODE', style: label),
               const Spacer(),
               SegmentedButton<AiMode>(
-                segments: const [
-                  ButtonSegment(
+                segments: [
+                  const ButtonSegment(
                     value: AiMode.remote,
                     label: Text('Remote', style: TextStyle(fontSize: 11)),
                     icon: Icon(Icons.cloud_outlined, size: 14),
                   ),
-                  ButtonSegment(
-                    value: AiMode.local,
-                    label: Text('Local', style: TextStyle(fontSize: 11)),
-                    icon: Icon(Icons.memory_outlined, size: 14),
-                  ),
+                  if (!isIos)
+                    const ButtonSegment(
+                      value: AiMode.local,
+                      label: Text('Local', style: TextStyle(fontSize: 11)),
+                      icon: Icon(Icons.memory_outlined, size: 14),
+                    ),
                 ],
                 selected: {cfg.mode},
                 onSelectionChanged: (sel) async {
@@ -1618,7 +1620,9 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Switch to Local mode to manage on-device models and run inference without network calls.',
+                      isIos
+                          ? 'iOS uses remote AI mode only. Local on-device model controls are available on Android.'
+                          : 'Switch to Local mode to manage on-device models and run inference without network calls.',
                       style: TextStyle(
                         fontSize: 11,
                         color: dark ? Colors.white54 : Colors.black54,

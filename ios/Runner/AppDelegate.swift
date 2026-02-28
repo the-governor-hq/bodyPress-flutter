@@ -19,20 +19,48 @@ import UIKit
     llmChannel.setMethodCallHandler { (call, result) in
       switch call.method {
       case "resolveBackend":
-        // TODO: Probe for Core ML / on-device model availability
+        // iOS is remote-only for now.
         result("none")
       case "downloadModel":
-        // TODO: Real model download
-        result(["modelName": "stub-model-q4"])
+        result(
+          FlutterError(
+            code: "UNSUPPORTED_ON_IOS",
+            message: "Local model download is not supported on iOS. Use remote AI mode.",
+            details: nil
+          )
+        )
       case "activateModel":
-        result(nil)
+        result(
+          FlutterError(
+            code: "UNSUPPORTED_ON_IOS",
+            message: "Local model activation is not supported on iOS. Use remote AI mode.",
+            details: nil
+          )
+        )
       case "deactivateModel":
-        result(nil)
+        result(
+          FlutterError(
+            code: "UNSUPPORTED_ON_IOS",
+            message: "Local model deactivation is not supported on iOS.",
+            details: nil
+          )
+        )
       case "deleteModel":
-        result(nil)
+        result(
+          FlutterError(
+            code: "UNSUPPORTED_ON_IOS",
+            message: "Local model deletion is not supported on iOS.",
+            details: nil
+          )
+        )
       case "chatCompletion":
-        // TODO: Route to real on-device inference (Core ML / llama.cpp)
-        result(["content": "[iOS local stub] On-device inference not yet wired."])
+        result(
+          FlutterError(
+            code: "UNSUPPORTED_ON_IOS",
+            message: "Local chat completion is not supported on iOS. Use remote AI mode.",
+            details: nil
+          )
+        )
       default:
         result(FlutterMethodNotImplemented)
       }
