@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/router/app_router.dart';
@@ -9,6 +10,10 @@ import 'core/theme/theme_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load .env file (keys available via dotenv.env['KEY']).
+  // Silently ignored when the file is absent (e.g. CI builds that use --dart-define).
+  await dotenv.load(fileName: '.env', mergeWith: {}).catchError((_) {});
 
   // Initialise background capture scheduler (re-registers periodic task
   // if the user previously enabled it).

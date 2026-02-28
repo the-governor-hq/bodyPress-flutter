@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/ai_models.dart';
@@ -21,8 +22,14 @@ import '../models/ai_models.dart';
 class AiService {
   static const String _baseUrl = 'https://ai.governor-hq.com';
 
-  /// API key injected at build time via `--dart-define=AI_API_KEY=...`
-  static const String _apiKey = String.fromEnvironment('AI_API_KEY');
+  /// API key resolved in order:
+  ///  1. Compile-time `--dart-define=AI_API_KEY=...` (CI builds)
+  ///  2. Runtime `.env` file loaded by flutter_dotenv (local dev)
+  static String get _apiKey {
+    const compiled = String.fromEnvironment('AI_API_KEY');
+    if (compiled.isNotEmpty) return compiled;
+    return dotenv.env['AI_API_KEY'] ?? '';
+  }
 
   final http.Client _client;
 
