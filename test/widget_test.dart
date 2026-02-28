@@ -1,30 +1,39 @@
-// This is a basic Flutter widget test.
+// Smoke test — verifies BodyPress can build without errors.
 //
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Platform plugins (Health, GPS, Calendar, sqflite, etc.) are not available in
+// the test environment, so we override the DB-dependent theme provider and
+// assert that the widget tree inflates.
 
+import 'package:bodypress_flutter/core/router/app_router.dart';
+import 'package:bodypress_flutter/core/theme/theme_provider.dart';
+import 'package:bodypress_flutter/main.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:bodypress_flutter/main.dart';
+/// A test-only notifier that returns the default theme without touching the DB.
+class _TestThemeModeNotifier extends ThemeModeNotifier {
+  @override
+  ThemeMode build() => ThemeMode.system; // no DB call
+}
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  setUpAll(() {
+    // Initialise the router the same way main() does.
+    AppRouter.init(skipOnboarding: true);
+  });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  testWidgets('MyApp builds and renders a MaterialApp', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [themeModeProvider.overrideWith(_TestThemeModeNotifier.new)],
+        child: const MyApp(),
+      ),
+    );
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // The MaterialApp.router should have mounted successfully.
+    expect(find.byType(MaterialApp), findsOneWidget);
   });
 }

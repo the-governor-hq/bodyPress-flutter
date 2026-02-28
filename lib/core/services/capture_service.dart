@@ -21,6 +21,7 @@ class CaptureService {
   final HealthService _healthService;
   final AmbientScanService _ambientService;
   final LocationService _locationService;
+  // ignore: unused_field — reserved for future GPS aggregation
   final GpsMetricsService _gpsMetricsService;
   final CalendarService _calendarService;
   final LocalDbService _dbService;
@@ -129,7 +130,6 @@ class CaptureService {
   Future<CaptureHealthData?> _collectHealthData() async {
     try {
       final now = DateTime.now();
-      final startOfDay = DateTime(now.year, now.month, now.day);
 
       // Get today's steps
       final steps = await _healthService.getTodaySteps();

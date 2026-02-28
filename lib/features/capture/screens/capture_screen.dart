@@ -82,7 +82,7 @@ class _CaptureScreenState extends State<CaptureScreen>
     });
 
     try {
-      final capture = await _captureService.createCapture(
+      await _captureService.createCapture(
         includeHealth: _includeHealth,
         includeEnvironment: _includeEnvironment,
         includeLocation: _includeLocation,

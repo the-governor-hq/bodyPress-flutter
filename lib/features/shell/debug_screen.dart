@@ -1027,7 +1027,7 @@ class _DebugScreenState extends State<DebugScreen> {
               itemCount: _dbRows.length,
               itemBuilder: (_, i) {
                 final row = _dbRows[i];
-                final tags = (row['tags'] as String?) ?? '[]';
+                final _ = (row['tags'] as String?) ?? '[]';
                 final note = (row['user_note'] as String?);
                 final userMood = (row['user_mood'] as String?);
                 return Container(
