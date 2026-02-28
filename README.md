@@ -1,6 +1,6 @@
 # BodyPress
 
-[![CI — Test & Build APK](https://github.com/the-governor-hq/bodyPress-flutter/actions/workflows/ci.yml/badge.svg)](https://github.com/the-governor-hq/bodyPress-flutter/actions/workflows/ci.yml)
+[![CI — Download Build APK](https://github.com/the-governor-hq/bodyPress-flutter/actions/workflows/ci.yml/badge.svg)](https://github.com/the-governor-hq/bodyPress-flutter/actions/workflows/ci.yml)
 
 A cross-platform Flutter application that aggregates physiological, environmental, and behavioural data from device sensors, then synthesises a daily first-person narrative — a journal written by the user's body.
 
@@ -14,6 +14,7 @@ A cross-platform Flutter application that aggregates physiological, environmenta
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/ce5c09cf-0021-4f67-bb28-31bc0b6fcdfe" />
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/4f7cb624-64e7-4728-a1d4-ea87a914cf15" />
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/3218e319-f647-4b30-8785-f6bf38256e6e" />
+<img width="300" alt="image" src="https://github.com/user-attachments/assets/57cd41ac-3d52-43cf-9cac-da500b8caa3e" />
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/f44194ea-0f20-4805-8744-a85c1f80f844" />
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/14dd1b37-20f3-412b-aa8a-8521633e7488" />
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/d009636a-4713-48a2-b62a-81ec479cc320" />

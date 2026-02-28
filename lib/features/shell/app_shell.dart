@@ -6,7 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 
-/// Root scaffold with a floating, frosted-glass zen navigation bar.
+/// Root scaffold with a reader-inspired editorial chapter navigation.
 class AppShell extends StatelessWidget {
   const AppShell({required this.navigationShell, super.key});
 
@@ -18,7 +18,7 @@ class AppShell extends StatelessWidget {
       // Body bleeds under the floating nav bar so the blur has content to blur.
       extendBody: true,
       body: navigationShell,
-      bottomNavigationBar: _ZenNavBar(
+      bottomNavigationBar: _ChapterNav(
         currentIndex: navigationShell.currentIndex,
         onTap: (index) => navigationShell.goBranch(
           index,
@@ -36,50 +36,52 @@ class _NavItem {
     required this.icon,
     required this.activeIcon,
     required this.label,
+    required this.numeral,
   });
   final IconData icon;
   final IconData activeIcon;
   final String label;
+
+  /// Roman numeral shown as a subtle chapter marker on active tab.
+  final String numeral;
 }
 
 const List<_NavItem> _navItems = [
   _NavItem(
     icon: Icons.auto_stories_outlined,
     activeIcon: Icons.auto_stories,
-    label: 'journal',
+    label: 'Journal',
+    numeral: 'I',
   ),
   _NavItem(
     icon: Icons.insights_outlined,
     activeIcon: Icons.insights,
-    label: 'patterns',
+    label: 'Patterns',
+    numeral: 'II',
   ),
   _NavItem(
-    icon: Icons.add_circle_outline_rounded,
-    activeIcon: Icons.add_circle_rounded,
-    label: 'capture',
+    icon: Icons.edit_note_rounded,
+    activeIcon: Icons.edit_note_rounded,
+    label: 'Capture',
+    numeral: 'III',
   ),
 ];
 
-// ─── Animated zen nav bar ────────────────────────────────────────────────────
+// ─── Chapter navigation bar ────────────────────────────────────────────────────
 
-class _ZenNavBar extends StatefulWidget {
-  const _ZenNavBar({required this.currentIndex, required this.onTap});
+class _ChapterNav extends StatefulWidget {
+  const _ChapterNav({required this.currentIndex, required this.onTap});
 
   final int currentIndex;
   final ValueChanged<int> onTap;
 
   @override
-  State<_ZenNavBar> createState() => _ZenNavBarState();
+  State<_ChapterNav> createState() => _ChapterNavState();
 }
 
-class _ZenNavBarState extends State<_ZenNavBar> with TickerProviderStateMixin {
-  /// Drives the water-drop shape morph: narrow drop → settled puddle.
-  late final AnimationController _dropCtrl;
-
-  /// Drives the horizontal slide of the indicator to the new tab.
+class _ChapterNavState extends State<_ChapterNav>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _slideCtrl;
-
-  late final Animation<double> _dropAnim;
   late final CurvedAnimation _slideAnim;
 
   int _prevIndex = 0;
@@ -89,37 +91,23 @@ class _ZenNavBarState extends State<_ZenNavBar> with TickerProviderStateMixin {
     super.initState();
     _prevIndex = widget.currentIndex;
 
-    _dropCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 700),
-    );
     _slideCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 380),
+      duration: const Duration(milliseconds: 420),
     );
-
-    // Elastic out → mimics a water drop tensioning and settling.
-    _dropAnim = CurvedAnimation(parent: _dropCtrl, curve: Curves.elasticOut);
-
-    // Smooth deceleration slide.
     _slideAnim = CurvedAnimation(
       parent: _slideCtrl,
       curve: Curves.easeInOutCubicEmphasized,
     );
 
-    // Start in "settled" state for the initial tab.
-    _dropCtrl.value = 1.0;
     _slideCtrl.value = 1.0;
   }
 
   @override
-  void didUpdateWidget(_ZenNavBar old) {
+  void didUpdateWidget(_ChapterNav old) {
     super.didUpdateWidget(old);
     if (old.currentIndex != widget.currentIndex) {
       _prevIndex = old.currentIndex;
-      _dropCtrl
-        ..reset()
-        ..forward();
       _slideCtrl
         ..reset()
         ..forward();
@@ -128,7 +116,6 @@ class _ZenNavBarState extends State<_ZenNavBar> with TickerProviderStateMixin {
 
   @override
   void dispose() {
-    _dropCtrl.dispose();
     _slideCtrl.dispose();
     super.dispose();
   }
@@ -138,42 +125,35 @@ class _ZenNavBarState extends State<_ZenNavBar> with TickerProviderStateMixin {
     final bottomPad = MediaQuery.paddingOf(context).bottom;
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPad + 12),
+      padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPad + 10),
       child: SizedBox(
-        height: 68,
+        height: 72,
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(34),
+          borderRadius: BorderRadius.circular(18),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+            filter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
             child: Container(
               decoration: BoxDecoration(
-                color: AppTheme.deepSea.withValues(alpha: 0.82),
-                borderRadius: BorderRadius.circular(34),
+                color: AppTheme.deepSea.withValues(alpha: 0.90),
+                borderRadius: BorderRadius.circular(18),
                 border: Border.all(
-                  color: AppTheme.shimmer.withValues(alpha: 0.45),
+                  color: AppTheme.shimmer.withValues(alpha: 0.30),
                   width: 0.5,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.45),
-                    blurRadius: 32,
-                    offset: const Offset(0, 12),
-                  ),
-                  // Faint bioluminescent underglow.
-                  BoxShadow(
-                    color: AppTheme.glow.withValues(alpha: 0.05),
-                    blurRadius: 48,
-                    offset: const Offset(0, -4),
+                    color: Colors.black.withValues(alpha: 0.50),
+                    blurRadius: 24,
+                    offset: const Offset(0, 10),
                   ),
                 ],
               ),
               child: AnimatedBuilder(
-                animation: Listenable.merge([_dropCtrl, _slideCtrl]),
-                builder: (context, _) => _NavBarContent(
+                animation: _slideAnim,
+                builder: (context, _) => _ChapterNavContent(
                   items: _navItems,
                   currentIndex: widget.currentIndex,
                   prevIndex: _prevIndex,
-                  dropAnim: _dropAnim,
                   slideAnim: _slideAnim,
                   onTap: widget.onTap,
                 ),
@@ -188,12 +168,11 @@ class _ZenNavBarState extends State<_ZenNavBar> with TickerProviderStateMixin {
 
 // ─── Inner content (rebuilt on animation tick) ───────────────────────────────
 
-class _NavBarContent extends StatelessWidget {
-  const _NavBarContent({
+class _ChapterNavContent extends StatelessWidget {
+  const _ChapterNavContent({
     required this.items,
     required this.currentIndex,
     required this.prevIndex,
-    required this.dropAnim,
     required this.slideAnim,
     required this.onTap,
   });
@@ -201,7 +180,6 @@ class _NavBarContent extends StatelessWidget {
   final List<_NavItem> items;
   final int currentIndex;
   final int prevIndex;
-  final Animation<double> dropAnim;
   final Animation<double> slideAnim;
   final ValueChanged<int> onTap;
 
@@ -212,71 +190,58 @@ class _NavBarContent extends StatelessWidget {
         final total = items.length;
         final itemW = constraints.maxWidth / total;
 
-        // Interpolated x-position of the indicator centre.
-        final fromCX = prevIndex * itemW + itemW / 2;
-        final toCX = currentIndex * itemW + itemW / 2;
-        final cx = Tween<double>(
-          begin: fromCX,
-          end: toCX,
+        // Interpolated x-position of the sliding top rule.
+        final fromX = prevIndex * itemW;
+        final toX = currentIndex * itemW;
+        final lineX = Tween<double>(
+          begin: fromX,
+          end: toX,
         ).animate(slideAnim).value;
 
-        // Water-drop shape: starts slightly taller/narrower, then settles.
-        final t = dropAnim.value.clamp(0.0, 1.0);
-        final dropScaleX = 0.65 + 0.35 * t; // narrows on drop, widens on settle
-        final dropScaleY = 1.3 - 0.3 * t; // squishes down as it settles
-
-        const pillW = 52.0;
-        const pillH = 28.0;
-        const glowR = 52.0;
+        // The rule inset from each tab edge — gives a refined, editorial gap.
+        const lineInset = 22.0;
+        const lineH = 1.5;
 
         return Stack(
           clipBehavior: Clip.none,
           children: [
-            // ── Soft radial glow around the active indicator ──────────────
+            // ── Glowing top-rule chapter indicator ────────────────────────
             Positioned(
-              left: cx - glowR,
-              top: (68 - glowR * 2) / 2,
-              width: glowR * 2,
-              height: glowR * 2,
-              child: Opacity(
-                opacity: (0.3 + 0.7 * t).clamp(0.0, 1.0),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: RadialGradient(
-                      colors: [
-                        AppTheme.glow.withValues(alpha: 0.22),
-                        Colors.transparent,
-                      ],
-                    ),
+              left: lineX + lineInset,
+              top: 0,
+              width: itemW - lineInset * 2,
+              height: lineH,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: AppTheme.glow,
+                  borderRadius: BorderRadius.vertical(
+                    bottom: Radius.circular(2),
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.glow.withValues(alpha: 0.55),
+                      blurRadius: 10,
+                      spreadRadius: 2,
+                    ),
+                  ],
                 ),
               ),
             ),
 
-            // ── Pill indicator ────────────────────────────────────────────
-            Positioned(
-              left: cx - pillW / 2,
-              top: (68 - pillH) / 2,
-              width: pillW,
-              height: pillH,
-              child: Transform.scale(
-                scaleX: dropScaleX,
-                scaleY: dropScaleY,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
-                    color: AppTheme.glow.withValues(alpha: 0.13),
-                    border: Border.all(
-                      color: AppTheme.glow.withValues(alpha: 0.35),
-                      width: 0.75,
-                    ),
-                  ),
+            // ── Subtle dividers between tabs ──────────────────────────────
+            ...List.generate(total - 1, (i) {
+              return Positioned(
+                left: itemW * (i + 1),
+                top: 20,
+                bottom: 20,
+                width: 0.5,
+                child: ColoredBox(
+                  color: AppTheme.shimmer.withValues(alpha: 0.40),
                 ),
-              ),
-            ),
+              );
+            }),
 
-            // ── Nav items ─────────────────────────────────────────────────
+            // ── Chapter tabs ──────────────────────────────────────────────
             Row(
               children: List.generate(total, (i) {
                 final isActive = i == currentIndex;
@@ -284,14 +249,10 @@ class _NavBarContent extends StatelessWidget {
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () {
-                      HapticFeedback.lightImpact();
+                      HapticFeedback.selectionClick();
                       onTap(i);
                     },
-                    child: _NavItemTile(
-                      item: items[i],
-                      isActive: isActive,
-                      dropT: isActive ? t : 1.0,
-                    ),
+                    child: _ChapterTab(item: items[i], isActive: isActive),
                   ),
                 );
               }),
@@ -303,55 +264,63 @@ class _NavBarContent extends StatelessWidget {
   }
 }
 
-// ─── Single nav tile ─────────────────────────────────────────────────────────
+// ─── Single chapter tab ──────────────────────────────────────────────────────
 
-class _NavItemTile extends StatelessWidget {
-  const _NavItemTile({
-    required this.item,
-    required this.isActive,
-    required this.dropT,
-  });
+class _ChapterTab extends StatelessWidget {
+  const _ChapterTab({required this.item, required this.isActive});
 
   final _NavItem item;
   final bool isActive;
 
-  /// 0→1 animation progress for the active drop settle (1 = fully settled).
-  final double dropT;
-
   @override
   Widget build(BuildContext context) {
-    final iconColor = isActive
-        ? Color.lerp(AppTheme.fog, AppTheme.glow, dropT)!
-        : AppTheme.fog;
-
-    final textColor = isActive
-        ? Color.lerp(AppTheme.fog, AppTheme.glow, dropT)!
-        : AppTheme.fog;
-
-    // Icon dips slightly as the "drop" falls in, then rises.
-    final dy = isActive ? -3.0 * (1.0 - dropT).clamp(0.0, 1.0) : 0.0;
+    final iconColor = isActive ? AppTheme.glow : AppTheme.fog;
+    final labelColor = isActive ? AppTheme.moonbeam : AppTheme.fog;
+    final numeralColor = isActive
+        ? AppTheme.glow.withValues(alpha: 0.70)
+        : Colors.transparent;
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Transform.translate(
-          offset: Offset(0, dy),
+        const SizedBox(height: 4), // breathing room below the top rule
+        // ── Chapter numeral ──────────────────────────────────────────────
+        AnimatedDefaultTextStyle(
+          duration: const Duration(milliseconds: 250),
+          style: TextStyle(
+            fontSize: 8,
+            fontWeight: FontWeight.w500,
+            color: numeralColor,
+            letterSpacing: 1.5,
+            fontFamily: 'DM Sans',
+          ),
+          child: Text(item.numeral),
+        ),
+        const SizedBox(height: 2),
+        // ── Icon ─────────────────────────────────────────────────────────
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 220),
+          transitionBuilder: (child, anim) =>
+              FadeTransition(opacity: anim, child: child),
           child: Icon(
             isActive ? item.activeIcon : item.icon,
-            size: 22,
+            key: ValueKey(isActive),
+            size: 20,
             color: iconColor,
           ),
         ),
-        const SizedBox(height: 3),
-        Text(
-          item.label,
+        const SizedBox(height: 4),
+        // ── Label (all-caps editorial) ────────────────────────────────────
+        AnimatedDefaultTextStyle(
+          duration: const Duration(milliseconds: 220),
           style: TextStyle(
-            fontSize: 10,
-            fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-            color: textColor,
-            letterSpacing: isActive ? 0.2 : 0.6,
+            fontSize: 9,
+            fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
+            color: labelColor,
+            letterSpacing: 2.2,
             fontFamily: 'DM Sans',
           ),
+          child: Text(item.label.toUpperCase()),
         ),
       ],
     );
