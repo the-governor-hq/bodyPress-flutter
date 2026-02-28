@@ -8,6 +8,7 @@ A cross-platform Flutter application that aggregates physiological, environmenta
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/4a6de629-54b0-40f4-af2a-b8650b305fd2" />
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/7b58bd67-4dc1-4cd4-88a7-6a177d931bb1" />
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/1c07cc5f-6dfd-4f66-9294-19f1bf20e8d8" />
+<img width="300" alt="image" src="https://github.com/user-attachments/assets/ecee3855-2836-4e5b-a559-c9edac9166a7" />
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/4b7bb0b1-2f92-40b1-a170-49a67ac802c8" />
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/8834a150-3d16-4fcc-bb7f-a184a9b91c48" />
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/b76caba3-f7ee-449f-ab20-9795bbcff717" />
