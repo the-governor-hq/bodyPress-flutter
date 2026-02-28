@@ -31,7 +31,7 @@ class LocalDbService {
   static const _tableEntries = 'entries';
   static const _tableSettings = 'settings';
   static const _tableCaptures = 'captures';
-  static const _schemaVersion = 6;
+  static const _schemaVersion = 7;
 
   Database? _db;
 
@@ -95,7 +95,8 @@ class LocalDbService {
         trigger          TEXT,
         execution_duration_ms INTEGER,
         errors           TEXT    NOT NULL DEFAULT '[]',
-        battery_level    INTEGER
+        battery_level    INTEGER,
+        ai_metadata      TEXT
       )
     ''');
     await db.execute('''
@@ -179,6 +180,16 @@ class LocalDbService {
       try {
         await db.execute(
           'ALTER TABLE $_tableEntries ADD COLUMN ai_generated INTEGER NOT NULL DEFAULT 0',
+        );
+      } catch (e) {
+        if (!e.toString().toLowerCase().contains('duplicate column')) rethrow;
+      }
+    }
+    if (oldVersion < 7) {
+      // v6 → v7: add AI metadata column to captures table
+      try {
+        await db.execute(
+          'ALTER TABLE $_tableCaptures ADD COLUMN ai_metadata TEXT',
         );
       } catch (e) {
         if (!e.toString().toLowerCase().contains('duplicate column')) rethrow;
@@ -451,6 +462,23 @@ class LocalDbService {
       orderBy: 'timestamp ASC',
     );
     return rows.map((row) => CaptureEntry.fromJson(row)).toList();
+  }
+
+  /// Update only the [ai_metadata] column for an existing capture.
+  ///
+  /// More efficient than loading + re-saving a full [CaptureEntry] when the
+  /// only thing that changed is the AI metadata.
+  Future<void> updateCaptureAiMetadata(
+    String captureId,
+    String aiMetadataJson,
+  ) async {
+    final db = await _database;
+    await db.update(
+      _tableCaptures,
+      {'ai_metadata': aiMetadataJson},
+      where: 'id = ?',
+      whereArgs: [captureId],
+    );
   }
 
   /// Delete a capture by ID.

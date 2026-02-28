@@ -48,6 +48,7 @@ lib/
 │   ├── models/
 │   │   ├── body_blog_entry.dart          # BodyBlogEntry, BodySnapshot
 │   │   ├── capture_entry.dart            # CaptureEntry + health/env/location sub-models
+│   │   ├── capture_ai_metadata.dart      # CaptureAiMetadata — structured AI-derived tags, themes, energy level
 │   │   ├── ai_models.dart                # ChatMessage, ChatCompletionRequest/Response
 │   │   └── background_capture_config.dart # Background capture scheduling config
 │   ├── router/
@@ -56,6 +57,7 @@ lib/
 │   │   ├── service_providers.dart        # ★ Central Riverpod provider registry (one singleton per service)
 │   │   ├── body_blog_service.dart        # Smart refresh orchestrator — instant / incremental / cold-start
 │   │   ├── journal_ai_service.dart       # Prompt building + AI call + JSON parsing → JournalAiResult
+│   │   ├── capture_metadata_service.dart # Background AI metadata extraction per capture → CaptureAiMetadata
 │   │   ├── ai_service.dart               # HTTP client for ai.governor-hq.com
 │   │   ├── ai_service_provider.dart      # Riverpod provider for AiService (re-exported by service_providers)
 │   │   ├── local_db_service.dart         # SQLite (sqflite) — entries, captures, settings
@@ -96,7 +98,9 @@ lib/
 - **`JournalAiResult`** — Parsed AI output: `headline`, `summary`, `fullBody`, `mood`, `moodEmoji`, `tags`.
 - **`BodyBlogEntry`** — Immutable value object containing date, headline, summary, full body text, mood, tags, optional user note, optional user mood emoji, `aiGenerated` flag, and the raw `BodySnapshot`.
 - **`BodySnapshot`** — Flat struct of all collected metrics for a given day. Serialisation-ready for persistence and AI prompt context.
-- **`CaptureEntry`** — A comprehensive snapshot of the user's state at a moment in time (health, environment, location, calendar). Includes an `isProcessed` flag and `processedAt` timestamp to track whether the AI has consumed it.
+- **`CaptureEntry`** — A comprehensive snapshot of the user's state at a moment in time (health, environment, location, calendar). Includes an `isProcessed` flag and `processedAt` timestamp to track whether the AI has consumed it. Also carries an optional `aiMetadata` field populated asynchronously after capture.
+- **`CaptureAiMetadata`** — Structured AI-derived metadata for a single capture: `summary`, `themes`, `energyLevel`, `moodAssessment`, `tags`, `notableSignals`, `generatedAt`. Encoded as JSON in the `captures` table (`ai_metadata` column, schema v7).
+- **`CaptureMetadataService`** — Fires after every new capture (fire-and-forget) and also runs a catch-up pass on app start. Calls the AI with a structured prompt, parses the JSON response, and writes only the `ai_metadata` column without re-saving the full entry. Reports per-capture progress via an optional `onProgress(done, total)` callback.
 - **`LocalDbService`** — SQLite CRUD for entries, captures, and settings. Provides `loadUnprocessedCapturesForDate()` and `markCapturesProcessed()` for the smart refresh pipeline.
 
 ### Stack
@@ -118,7 +122,7 @@ lib/
 1. **Onboarding** — Step-by-step permission flow. Each permission (location, health, calendar) is presented on its own page with an explanation of why it is needed and a privacy note. All steps are skippable.
 2. **Journal** (Tab 0, `/`) — Paginated journal. Swipe between days. Each page shows date, inferred mood, headline, summary, data tags, a stat glance bar, and a "Read full entry" link. Today's page includes a **"Refresh day"** button that triggers a full sensor + AI refresh. Pull-to-refresh also works on the today card.
 3. **Journal Detail** — Full narrative view. Sections: Sleep, Movement, Heart, Environment, Agenda. Includes AI regeneration button and mood/note editor.
-4. **Patterns** (Tab 1) — Trends and pattern analysis.
+4. **Patterns** (Tab 1) — AI-derived trends aggregated from all captures. Shows energy distribution (high/medium/low), top recurring themes, keyword tags, notable signals, and a timeline of recent moments. Analysis runs in the background immediately after each capture; a live progress bar tracks the queue. Results appear progressively as each capture is processed — the screen auto-refreshes when the queue clears.
 5. **Capture** (Tab 2) — Manual capture screen with toggleable data sources (health, environment, location, calendar).
 6. **Debug Panel** (`/debug`) — Raw sensor readout: all health metrics, GPS coordinates, ambient data, calendar events. Accessible via the bug icon on the journal screen.
 7. **Environment Detail** (`/environment`) — Expanded environmental data.
@@ -237,6 +241,8 @@ This will be replaced by a classifier or LLM prompt once sufficient labelled dat
 - [x] Background captures via WorkManager with quiet hours and battery awareness
 - [x] Manual capture screen with configurable data source toggles
 - [x] Explicit "Refresh day" button for user-triggered full sensor + AI refresh
+- [x] Per-capture AI metadata extraction in background (`CaptureMetadataService`) — themes, energy level, signals, tags
+- [x] Patterns screen — progressive AI-derived insights from capture history (energy trends, top themes, recurring signals, recent moments timeline)
 
 ### Mid-term — BLE peripherals
 
@@ -369,7 +375,7 @@ The journal system has three layers — understanding them prevents accidental s
 
 ### Database migrations
 
-Schema version is tracked in `local_db_service.dart` (`_schemaVersion`). To add a column:
+Schema version is tracked in `local_db_service.dart` (`_schemaVersion`). Current version: **7**. To add a column:
 
 1. Bump `_schemaVersion`
 2. Add a new `if (oldVersion < N)` block in `_onUpgrade()`

@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'capture_ai_metadata.dart';
+
 /// Where a capture originated.
 enum CaptureSource {
   /// User tapped the capture button.
@@ -68,6 +70,9 @@ class CaptureEntry {
   /// AI-generated insights (if processed).
   final String? aiInsights;
 
+  /// Structured AI metadata generated in the background after each capture.
+  final CaptureAiMetadata? aiMetadata;
+
   /// Whether this was a manual or background capture.
   final CaptureSource source;
 
@@ -96,6 +101,7 @@ class CaptureEntry {
     this.calendarEvents = const [],
     this.processedAt,
     this.aiInsights,
+    this.aiMetadata,
     this.source = CaptureSource.manual,
     this.trigger,
     this.executionDuration,
@@ -123,6 +129,8 @@ class CaptureEntry {
     bool clearProcessedAt = false,
     String? aiInsights,
     bool clearAiInsights = false,
+    CaptureAiMetadata? aiMetadata,
+    bool clearAiMetadata = false,
     CaptureSource? source,
     CaptureTrigger? trigger,
     bool clearTrigger = false,
@@ -149,6 +157,7 @@ class CaptureEntry {
       calendarEvents: calendarEvents ?? this.calendarEvents,
       processedAt: clearProcessedAt ? null : (processedAt ?? this.processedAt),
       aiInsights: clearAiInsights ? null : (aiInsights ?? this.aiInsights),
+      aiMetadata: clearAiMetadata ? null : (aiMetadata ?? this.aiMetadata),
       source: source ?? this.source,
       trigger: clearTrigger ? null : (trigger ?? this.trigger),
       executionDuration: clearExecutionDuration
@@ -178,6 +187,7 @@ class CaptureEntry {
     'calendar_events': jsonEncode(calendarEvents),
     'processed_at': processedAt?.toIso8601String(),
     'ai_insights': aiInsights,
+    'ai_metadata': aiMetadata?.encode(),
     'source': source.name,
     'trigger': trigger?.name,
     'execution_duration_ms': executionDuration?.inMilliseconds,
@@ -242,6 +252,7 @@ class CaptureEntry {
           ? DateTime.parse(json['processed_at'] as String)
           : null,
       aiInsights: json['ai_insights'] as String?,
+      aiMetadata: CaptureAiMetadata.decode(json['ai_metadata'] as String?),
       source: source,
       trigger: trigger,
       executionDuration: json['execution_duration_ms'] != null

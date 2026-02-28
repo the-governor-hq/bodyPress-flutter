@@ -6,6 +6,7 @@ import 'ambient_scan_service.dart';
 import 'background_capture_service.dart';
 import 'body_blog_service.dart';
 import 'calendar_service.dart';
+import 'capture_metadata_service.dart';
 import 'capture_service.dart';
 import 'context_window_service.dart';
 import 'gps_metrics_service.dart';
@@ -80,6 +81,14 @@ final captureServiceProvider = Provider<CaptureService>((ref) {
     locationService: ref.read(locationServiceProvider),
     calendarService: ref.read(calendarServiceProvider),
     dbService: ref.read(localDbServiceProvider),
+    metadataService: ref.read(captureMetadataServiceProvider),
+  );
+});
+
+final captureMetadataServiceProvider = Provider<CaptureMetadataService>((ref) {
+  return CaptureMetadataService(
+    ai: ref.read(aiServiceProvider),
+    db: ref.read(localDbServiceProvider),
   );
 });
 

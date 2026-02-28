@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import '../models/capture_entry.dart';
 import 'ambient_scan_service.dart';
 import 'calendar_service.dart';
+import 'capture_metadata_service.dart';
 import 'gps_metrics_service.dart';
 import 'health_service.dart';
 import 'local_db_service.dart';
@@ -26,6 +29,10 @@ class CaptureService {
   final CalendarService _calendarService;
   final LocalDbService _dbService;
 
+  /// Optional background metadata processor. When provided, every new capture
+  /// triggers an AI analysis in the background automatically.
+  final CaptureMetadataService? _metadataService;
+
   CaptureService({
     HealthService? healthService,
     AmbientScanService? ambientService,
@@ -33,12 +40,14 @@ class CaptureService {
     GpsMetricsService? gpsMetricsService,
     CalendarService? calendarService,
     LocalDbService? dbService,
+    CaptureMetadataService? metadataService,
   }) : _healthService = healthService ?? HealthService(),
        _ambientService = ambientService ?? AmbientScanService(),
        _locationService = locationService ?? LocationService(),
        _gpsMetricsService = gpsMetricsService ?? GpsMetricsService(),
        _calendarService = calendarService ?? CalendarService(),
-       _dbService = dbService ?? LocalDbService();
+       _dbService = dbService ?? LocalDbService(),
+       _metadataService = metadataService;
 
   /// Create a comprehensive capture of the current state.
   ///
@@ -122,6 +131,10 @@ class CaptureService {
 
     // Save to database
     await _dbService.saveCapture(capture);
+
+    // Kick off background AI metadata extraction — fire and forget.
+    // Errors are caught inside processCapture so they never propagate here.
+    unawaited(_metadataService?.processCapture(capture.id));
 
     return capture;
   }
