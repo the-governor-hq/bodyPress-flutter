@@ -1,32 +1,30 @@
 import 'package:device_calendar/device_calendar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/services/ambient_scan_service.dart';
-import '../../../core/services/calendar_service.dart';
-import '../../../core/services/context_window_service.dart';
 import '../../../core/services/gps_metrics_service.dart';
-import '../../../core/services/health_service.dart';
 import '../../../core/services/local_db_service.dart';
-import '../../../core/services/location_service.dart';
+import '../../../core/services/service_providers.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  final HealthService _healthService = HealthService();
-  final LocationService _locationService = LocationService();
-  final CalendarService _calendarService = CalendarService();
-  final AmbientScanService _ambientService = AmbientScanService();
-  final GpsMetricsService _gpsMetricsService = GpsMetricsService();
-  final LocalDbService _dbService = LocalDbService();
-  final ContextWindowService _contextWindowService = ContextWindowService();
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  late final _healthService = ref.read(healthServiceProvider);
+  late final _locationService = ref.read(locationServiceProvider);
+  late final _calendarService = ref.read(calendarServiceProvider);
+  late final _ambientService = ref.read(ambientScanServiceProvider);
+  late final _gpsMetricsService = ref.read(gpsMetricsServiceProvider);
+  late final _dbService = ref.read(localDbServiceProvider);
+  late final _contextWindowService = ref.read(contextWindowServiceProvider);
 
   int _todaySteps = 0;
   double _todayCalories = 0;

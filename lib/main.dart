@@ -3,8 +3,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/router/app_router.dart';
-import 'core/services/background_capture_service.dart';
-import 'core/services/local_db_service.dart';
+import 'core/services/service_providers.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
 
@@ -15,18 +14,22 @@ void main() async {
   // Silently ignored when the file is absent (e.g. CI builds that use --dart-define).
   await dotenv.load(fileName: '.env', mergeWith: {}).catchError((_) {});
 
+  // Build a single ProviderContainer that lives for the app's lifetime.
+  // All provider reads here share the same instances as the widget tree.
+  final container = ProviderContainer();
+
   // Initialise background capture scheduler (re-registers periodic task
   // if the user previously enabled it).
-  final bgService = BackgroundCaptureService();
+  final bgService = container.read(backgroundCaptureServiceProvider);
   await bgService.initialize();
 
   // Check whether the user opted out of seeing the intro.
-  final db = LocalDbService();
+  final db = container.read(localDbServiceProvider);
   final skipOnboarding = (await db.getSetting('skip_onboarding')) == 'true';
 
   AppRouter.init(skipOnboarding: skipOnboarding);
 
-  runApp(const ProviderScope(child: MyApp()));
+  runApp(UncontrolledProviderScope(container: container, child: const MyApp()));
 }
 
 class MyApp extends ConsumerWidget {

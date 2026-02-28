@@ -6,22 +6,22 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/models/body_blog_entry.dart';
-import '../../../core/services/body_blog_service.dart';
+import '../../../core/services/service_providers.dart';
 import '../../../core/theme/theme_provider.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Body Blog — Medium-inspired, Zen home screen
 // ─────────────────────────────────────────────────────────────────────────────
 
-class BodyBlogScreen extends StatefulWidget {
+class BodyBlogScreen extends ConsumerStatefulWidget {
   const BodyBlogScreen({super.key});
 
   @override
-  State<BodyBlogScreen> createState() => _BodyBlogScreenState();
+  ConsumerState<BodyBlogScreen> createState() => _BodyBlogScreenState();
 }
 
-class _BodyBlogScreenState extends State<BodyBlogScreen> {
-  final BodyBlogService _blogService = BodyBlogService();
+class _BodyBlogScreenState extends ConsumerState<BodyBlogScreen> {
+  late final _blogService = ref.read(bodyBlogServiceProvider);
   final PageController _pageCtrl = PageController();
 
   List<BodyBlogEntry> _entries = [];
@@ -989,17 +989,17 @@ class _ZenLoaderState extends State<_ZenLoader>
 //  FULL JOURNAL DETAIL PAGE
 // ═════════════════════════════════════════════════════════════════════════════
 
-class _BlogDetailPage extends StatefulWidget {
+class _BlogDetailPage extends ConsumerStatefulWidget {
   const _BlogDetailPage({required this.entry});
   final BodyBlogEntry entry;
 
   @override
-  State<_BlogDetailPage> createState() => _BlogDetailPageState();
+  ConsumerState<_BlogDetailPage> createState() => _BlogDetailPageState();
 }
 
-class _BlogDetailPageState extends State<_BlogDetailPage> {
+class _BlogDetailPageState extends ConsumerState<_BlogDetailPage> {
   late BodyBlogEntry _entry;
-  final BodyBlogService _blogService = BodyBlogService();
+  late final _blogService = ref.read(bodyBlogServiceProvider);
   bool _aiRegenerating = false;
 
   @override
