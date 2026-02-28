@@ -60,7 +60,7 @@ jobs:
         run: flutter pub get
 
       - name: Build release APK
-        run: flutter build apk --release
+        run: flutter build apk --release --dart-define=AI_API_KEY=${{ secrets.AI_API_KEY }}
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

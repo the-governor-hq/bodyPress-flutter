@@ -20,7 +20,9 @@ import '../models/ai_models.dart';
 /// ```
 class AiService {
   static const String _baseUrl = 'https://ai.governor-hq.com';
-  static const String _apiKey = 'Isk8ed5wspMwSknd4awrf';
+
+  /// API key injected at build time via `--dart-define=AI_API_KEY=...`
+  static const String _apiKey = String.fromEnvironment('AI_API_KEY');
 
   final http.Client _client;
 
