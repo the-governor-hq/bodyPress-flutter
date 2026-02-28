@@ -31,18 +31,23 @@ void main() async {
   final db = container.read(localDbServiceProvider);
   final skipOnboarding = (await db.getSetting('skip_onboarding')) == 'true';
 
-  // Re-schedule daily reminder if the user previously enabled it.
-  final dailyReminderTime = await db.getSetting('daily_reminder_time');
-  if (dailyReminderTime != null && dailyReminderTime.isNotEmpty) {
-    final parts = dailyReminderTime.split(':');
-    if (parts.length == 2) {
-      final hour = int.tryParse(parts[0]);
-      final minute = int.tryParse(parts[1]);
-      if (hour != null && minute != null) {
-        final notifService = container.read(notificationServiceProvider);
-        await notifService.initialize();
-        await notifService.scheduleDailyReminder(hour: hour, minute: minute);
-      }
+  // Ensure a daily reminder is enabled by default on first run.
+  const defaultDailyReminderTime = '19:00';
+  var dailyReminderTime = await db.getSetting('daily_reminder_time');
+  if (dailyReminderTime == null || dailyReminderTime.isEmpty) {
+    dailyReminderTime = defaultDailyReminderTime;
+    await db.setSetting('daily_reminder_time', dailyReminderTime);
+  }
+
+  final parts = dailyReminderTime.split(':');
+  if (parts.length == 2) {
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour != null && minute != null) {
+      final notifService = container.read(notificationServiceProvider);
+      await notifService.initialize();
+      await notifService.requestPermission();
+      await notifService.scheduleDailyReminder(hour: hour, minute: minute);
     }
   }
 
