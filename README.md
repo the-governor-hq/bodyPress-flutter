@@ -2,12 +2,13 @@
 
 A cross-platform Flutter application that aggregates physiological, environmental, and behavioural data from device sensors, then synthesises a daily first-person narrative — a journal written by the user's body.
 
+<img width="300" alt="image" src="https://github.com/user-attachments/assets/83c0a31e-1cfe-48e3-9478-9fcbf6c12dcc" />
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/4a6de629-54b0-40f4-af2a-b8650b305fd2" />
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/7b58bd67-4dc1-4cd4-88a7-6a177d931bb1" />
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/1c07cc5f-6dfd-4f66-9294-19f1bf20e8d8" />
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/4b7bb0b1-2f92-40b1-a170-49a67ac802c8" />
+<img width="300" alt="image" src="https://github.com/user-attachments/assets/8834a150-3d16-4fcc-bb7f-a184a9b91c48" />
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/b76caba3-f7ee-449f-ab20-9795bbcff717" />
-<img width="300" alt="image" src="https://github.com/user-attachments/assets/83c0a31e-1cfe-48e3-9478-9fcbf6c12dcc" />
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/ce5c09cf-0021-4f67-bb28-31bc0b6fcdfe" />
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/4f7cb624-64e7-4728-a1d4-ea87a914cf15" />
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/3218e319-f647-4b30-8785-f6bf38256e6e" />
