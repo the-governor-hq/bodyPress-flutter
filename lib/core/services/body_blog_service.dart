@@ -4,6 +4,7 @@ import '../models/body_blog_entry.dart';
 import 'ambient_scan_service.dart';
 import 'calendar_service.dart';
 import 'health_service.dart';
+import 'journal_ai_service.dart';
 import 'local_db_service.dart';
 import 'location_service.dart';
 
@@ -19,13 +20,19 @@ class BodyBlogService {
   final CalendarService _calendar = CalendarService();
   final AmbientScanService _ambient = AmbientScanService();
   final LocalDbService _db = LocalDbService();
+  final JournalAiService _ai = JournalAiService();
 
   // ── public API ──────────────────────────────────────────────────
 
   /// Build today's blog entry from live device data and persist it.
+  ///
+  /// Always collects a fresh [BodySnapshot] from sensors, then tries to
+  /// enrich the narrative with AI using today's stored captures.
+  /// Falls back gracefully to the local template when AI is unavailable.
   Future<BodyBlogEntry> getTodayEntry() async {
     final snapshot = await _collectSnapshot();
     final entry = _compose(DateTime.now(), snapshot);
+
     // Preserve any existing user note & mood when refreshing today's entry.
     final existing = await _db.loadEntry(entry.date);
     var toSave = entry;
@@ -37,8 +44,51 @@ class BodyBlogService {
         toSave = toSave.copyWith(userMood: existing.userMood);
       }
     }
+
+    // ── AI enrichment ──────────────────────────────────────────────
+    toSave = await _applyAi(DateTime.now(), toSave, snapshot);
+    // ──────────────────────────────────────────────────────────────
+
     await _db.saveEntry(toSave);
     return toSave;
+  }
+
+  /// Force-regenerate a journal entry with AI for any [date].
+  ///
+  /// Loads captures for that date from the DB and sends them to the AI.
+  /// The updated entry is persisted and returned.
+  /// Returns `null` if the entry doesn't exist in the DB and has no captures.
+  Future<BodyBlogEntry?> regenerateWithAi(DateTime date) async {
+    // For today we also refresh live sensor data; for past days use stored entry.
+    final today = DateTime.now();
+    final isToday =
+        date.year == today.year &&
+        date.month == today.month &&
+        date.day == today.day;
+
+    BodyBlogEntry? base;
+    BodySnapshot? snapshot;
+
+    if (isToday) {
+      snapshot = await _collectSnapshot();
+      base = _compose(today, snapshot);
+      final existing = await _db.loadEntry(today);
+      if (existing != null) {
+        if (existing.userNote != null) {
+          base = base.copyWith(userNote: existing.userNote);
+        }
+        if (existing.userMood != null) {
+          base = base.copyWith(userMood: existing.userMood);
+        }
+      }
+    } else {
+      base = await _db.loadEntry(date);
+      if (base == null) return null;
+    }
+
+    final updated = await _applyAi(date, base, snapshot);
+    await _db.saveEntry(updated);
+    return updated;
   }
 
   /// Build entries for the last [days] days.
@@ -70,6 +120,46 @@ class BodyBlogService {
     String? mood,
   }) {
     return _db.updateUserNote(date, note, mood: mood);
+  }
+
+  // ── AI enrichment ────────────────────────────────────────────────
+
+  /// Try to enrich [entry] with AI. Returns the updated entry on success,
+  /// or the original [entry] unchanged when AI is unavailable.
+  Future<BodyBlogEntry> _applyAi(
+    DateTime date,
+    BodyBlogEntry entry,
+    BodySnapshot? snapshotFallback,
+  ) async {
+    try {
+      final captures = await _db
+          .loadCapturesForDate(date)
+          .timeout(const Duration(seconds: 5), onTimeout: () => []);
+
+      final result = await _ai
+          .generate(
+            date,
+            captures,
+            snapshotFallback: snapshotFallback,
+            userNote: entry.userNote,
+            userMood: entry.userMood,
+          )
+          .timeout(const Duration(seconds: 45));
+
+      if (result == null) return entry;
+
+      return entry.copyWith(
+        headline: result.headline,
+        summary: result.summary,
+        fullBody: result.fullBody,
+        mood: result.mood,
+        moodEmoji: result.moodEmoji,
+        tags: result.tags,
+        aiGenerated: true,
+      );
+    } catch (_) {
+      return entry;
+    }
   }
 
   // ── data collection ─────────────────────────────────────────────

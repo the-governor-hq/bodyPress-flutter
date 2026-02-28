@@ -1,4 +1,5 @@
 # BodyPress
+
 A cross-platform Flutter application that aggregates physiological, environmental, and behavioural data from device sensors, then synthesises a daily first-person narrative — a journal written by the user's body.
 
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/4a6de629-54b0-40f4-af2a-b8650b305fd2" />
@@ -14,7 +15,6 @@ A cross-platform Flutter application that aggregates physiological, environmenta
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/14dd1b37-20f3-412b-aa8a-8521633e7488" />
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/d009636a-4713-48a2-b62a-81ec479cc320" />
 <img width="300" alt="image" src="https://github.com/user-attachments/assets/86b6c9a9-30af-4715-a62d-9a62e11e7d16" />
-
 
 ## Concept
 
@@ -45,8 +45,9 @@ lib/
 │   ├── router/
 │   │   └── app_router.dart           # GoRouter config
 │   ├── services/
-│   │   ├── body_blog_service.dart    # Data collection + narrative composition + DB integration
-│   │   ├── local_db_service.dart     # SQLite persistence (sqflite) — CRUD for BodyBlogEntry
+│   │   ├── body_blog_service.dart    # Data collection + narrative composition + AI enrichment
+│   │   ├── journal_ai_service.dart   # Prompt building + AI call + JSON parsing → JournalAiResult
+│   │   ├── local_db_service.dart     # SQLite persistence (sqflite) — CRUD for BodyBlogEntry + captures
 │   │   ├── context_window_service.dart # 7-day plain-text context builder (debug + LLM-ready)
 │   │   ├── health_service.dart       # HealthKit / Health Connect abstraction
 │   │   ├── location_service.dart     # Geolocator wrapper
@@ -70,9 +71,11 @@ lib/
 
 ### Key abstractions
 
-- **`BodyBlogService`** — Orchestrates data collection from all services, infers a mood label via heuristic rules, and composes the narrative. Designed to be swapped for an LLM endpoint (OpenAI, Gemini, local model) when the narrative quality ceiling is hit.
-- **`BodyBlogEntry`** — Immutable value object containing date, headline, summary, full body text, mood, tags, and the raw `BodySnapshot` used to generate it.
-- **`BodySnapshot`** — Flat struct of all collected metrics for a given day. Serialisation-ready for future persistence and API payloads.
+- **`BodyBlogService`** — Orchestrates data collection from all services, infers a mood label via heuristic rules, composes a local template narrative, then enriches it with `JournalAiService`. Falls back to the template silently when AI is unavailable.
+- **`JournalAiService`** — Builds a structured prompt from the day's `CaptureEntry` list (preferred) or a `BodySnapshot` (fallback), calls `AiService`, and parses the model's JSON response into a `JournalAiResult`.
+- **`JournalAiResult`** — Parsed AI output: `headline`, `summary`, `fullBody`, `mood`, `moodEmoji`, `tags`.
+- **`BodyBlogEntry`** — Immutable value object containing date, headline, summary, full body text, mood, tags, optional user note, optional user mood emoji, `aiGenerated` flag, and the raw `BodySnapshot`.
+- **`BodySnapshot`** — Flat struct of all collected metrics for a given day. Serialisation-ready for persistence and AI prompt context.
 
 ### Stack
 
@@ -95,6 +98,37 @@ lib/
 3. **Journal Detail** — Full narrative view. Sections: Sleep, Movement, Heart, Environment, Agenda.
 4. **Debug Panel** (`/debug`) — Raw sensor readout: all health metrics, GPS coordinates, ambient data, calendar events. Accessible via the settings icon on the blog screen.
 5. **Environment Detail** (`/environment`) — Expanded environmental data.
+
+## AI journal generation
+
+```
+BodyBlogService.getTodayEntry()
+  └─ _collectSnapshot()          →  BodySnapshot  (live sensors)
+  └─ _compose()                  →  BodyBlogEntry (local template)
+  └─ _applyAi(date, entry, snap)
+        └─ LocalDbService.loadCapturesForDate()  →  List<CaptureEntry>
+        │
+        ├─ captures exist? ─── JournalAiService.generate(captures)
+        │                           └─ _buildCapturesPrompt()  (chronological)
+        │
+        └─ no captures? ───── JournalAiService.generate(snapshotFallback)
+                                    └─ _buildSnapshotPrompt()  (single snapshot)
+        │
+        └─ AiService.ask(prompt, systemPrompt)
+              └─ POST ai.governor-hq.com  →  JSON response
+              └─ JournalAiResult.fromJson()
+              └─ entry.copyWith(headline, summary, fullBody, mood, …, aiGenerated: true)
+        │
+        └─ timeout / error  →  original template entry returned unchanged
+```
+
+**System prompt** — the model is instructed to write in first-person as "the body speaking to its person": warm, poetic, data-grounded, never clinical, never giving medical advice.
+
+**Timeouts** — `loadCapturesForDate` is capped at 5 s; the AI call at 45 s. Any failure (network, parse error, empty response) falls back to the local template with no visible error.
+
+**`aiGenerated` flag** — set to `true` on the persisted `BodyBlogEntry` when AI enrichment succeeds. Stored in SQLite (schema v6) so the ✦ badge survives app restarts.
+
+**`regenerateWithAi(date)`** — public method on `BodyBlogService` that forces a fresh AI pass for any date. Used by the journal detail screen after the user edits their note or mood.
 
 ## Mood inference (v1 — heuristic)
 
@@ -121,7 +155,7 @@ This will be replaced by a classifier or LLM prompt once sufficient labelled dat
 
 ### Near-term
 
-- [ ] LLM-backed narrative generation (structured prompt with BodySnapshot as context)
+- [x] LLM-backed narrative generation — `JournalAiService` uses day's `CaptureEntry` list (or `BodySnapshot` fallback) as structured prompt context; falls back to local template on failure
 - [x] Local persistence of daily entries (SQLite via sqflite)
 - [x] 7-day rolling context window — plain-text summary of last 7 DB entries, shown in debug panel + clipboard-ready for LLM prompts
 - [x] User annotations — free-text note per day, stored in SQLite, shown in journal detail

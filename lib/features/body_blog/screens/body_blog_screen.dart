@@ -173,13 +173,15 @@ class _BodyBlogScreenState extends State<BodyBlogScreen> {
   }
 
   void _openDetail(BuildContext context, BodyBlogEntry entry) {
-    Navigator.of(context).push(
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => _BlogDetailPage(entry: entry),
-        transitionsBuilder: (_, anim, __, child) =>
-            FadeTransition(opacity: anim, child: child),
-      ),
-    );
+    Navigator.of(context)
+        .push(
+          PageRouteBuilder(
+            pageBuilder: (_, __, ___) => _BlogDetailPage(entry: entry),
+            transitionsBuilder: (_, anim, __, child) =>
+                FadeTransition(opacity: anim, child: child),
+          ),
+        )
+        .then((_) => _load()); // refresh list with any AI changes from detail
   }
 }
 
@@ -220,7 +222,6 @@ class _TopBar extends ConsumerWidget {
         themeTooltip = 'Light mode (tap for system)';
         break;
       case ThemeMode.system:
-      default:
         themeIcon = dark ? Icons.brightness_auto : Icons.brightness_auto;
         themeTooltip = 'System theme (tap for dark)';
         break;
@@ -311,6 +312,10 @@ class _BlogPage extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
+                if (entry.aiGenerated) ...[
+                  const _AiBadge(),
+                  const SizedBox(width: 10),
+                ],
                 Text(entry.moodEmoji, style: const TextStyle(fontSize: 22)),
                 const SizedBox(width: 6),
                 Text(
@@ -756,6 +761,47 @@ class _TodayPill extends StatelessWidget {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+//  AI BADGE — small "✦ AI" chip on AI-generated entries
+// ═════════════════════════════════════════════════════════════════════════════
+
+class _AiBadge extends StatelessWidget {
+  const _AiBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: primary.withValues(alpha: dark ? 0.18 : 0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: primary.withValues(alpha: dark ? 0.35 : 0.25),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.auto_awesome_rounded, size: 10, color: primary),
+          const SizedBox(width: 3),
+          Text(
+            'AI',
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+              color: primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 //  ZEN LOADER
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -804,7 +850,7 @@ class _ZenLoaderState extends State<_ZenLoader>
             ),
             const SizedBox(height: 16),
             Text(
-              'Listening to your body…',
+              'Writing your journal with AI…',
               style: GoogleFonts.inter(
                 fontSize: 14,
                 fontWeight: FontWeight.w300,
@@ -833,11 +879,24 @@ class _BlogDetailPage extends StatefulWidget {
 class _BlogDetailPageState extends State<_BlogDetailPage> {
   late BodyBlogEntry _entry;
   final BodyBlogService _blogService = BodyBlogService();
+  bool _aiRegenerating = false;
 
   @override
   void initState() {
     super.initState();
     _entry = widget.entry;
+  }
+
+  Future<void> _regenerateWithAi() async {
+    if (_aiRegenerating) return;
+    setState(() => _aiRegenerating = true);
+    try {
+      final updated = await _blogService.regenerateWithAi(_entry.date);
+      if (updated != null && mounted) {
+        setState(() => _entry = updated);
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _aiRegenerating = false);
   }
 
   /// Return the label for a mood emoji, or the emoji itself as fallback.
@@ -1119,6 +1178,31 @@ class _BlogDetailPageState extends State<_BlogDetailPage> {
                                 : (dark ? Colors.white38 : Colors.black38),
                           ),
                   ),
+                  // AI regenerate button
+                  _aiRegenerating
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : Tooltip(
+                          message: _entry.aiGenerated
+                              ? 'Regenerate with AI'
+                              : 'Write with AI',
+                          child: IconButton(
+                            onPressed: _regenerateWithAi,
+                            icon: Icon(
+                              Icons.auto_awesome_rounded,
+                              size: 20,
+                              color: _entry.aiGenerated
+                                  ? primary
+                                  : (dark ? Colors.white38 : Colors.black38),
+                            ),
+                          ),
+                        ),
                 ],
               ),
             ),
@@ -1161,6 +1245,25 @@ class _BlogDetailPageState extends State<_BlogDetailPage> {
                             color: primary.withValues(alpha: 0.7),
                           ),
                         ),
+                        if (_aiRegenerating) ...[
+                          const SizedBox(width: 12),
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 1.5),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'AI writing…',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: primary.withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ] else if (_entry.aiGenerated) ...[
+                          const SizedBox(width: 12),
+                          const _AiBadge(),
+                        ],
                       ],
                     ),
 

@@ -31,7 +31,7 @@ class LocalDbService {
   static const _tableEntries = 'entries';
   static const _tableSettings = 'settings';
   static const _tableCaptures = 'captures';
-  static const _schemaVersion = 5;
+  static const _schemaVersion = 6;
 
   Database? _db;
 
@@ -58,16 +58,17 @@ class LocalDbService {
   Future<void> _onCreate(Database db, int version) async {
     await db.execute('''
       CREATE TABLE $_tableEntries (
-        date       TEXT    PRIMARY KEY,
-        headline   TEXT    NOT NULL,
-        summary    TEXT    NOT NULL,
-        full_body  TEXT    NOT NULL,
-        mood       TEXT    NOT NULL,
-        mood_emoji TEXT    NOT NULL,
-        tags       TEXT    NOT NULL DEFAULT '[]',
-        user_note  TEXT,
-        user_mood  TEXT,
-        snapshot   TEXT    NOT NULL DEFAULT '{}'
+        date         TEXT    PRIMARY KEY,
+        headline     TEXT    NOT NULL,
+        summary      TEXT    NOT NULL,
+        full_body    TEXT    NOT NULL,
+        mood         TEXT    NOT NULL,
+        mood_emoji   TEXT    NOT NULL,
+        tags         TEXT    NOT NULL DEFAULT '[]',
+        user_note    TEXT,
+        user_mood    TEXT,
+        snapshot     TEXT    NOT NULL DEFAULT '{}',
+        ai_generated INTEGER NOT NULL DEFAULT 0
       )
     ''');
     await db.execute('''
@@ -173,6 +174,16 @@ class LocalDbService {
         }
       }
     }
+    if (oldVersion < 6) {
+      // v5 → v6: add ai_generated column to entries table
+      try {
+        await db.execute(
+          'ALTER TABLE $_tableEntries ADD COLUMN ai_generated INTEGER NOT NULL DEFAULT 0',
+        );
+      } catch (e) {
+        if (!e.toString().toLowerCase().contains('duplicate column')) rethrow;
+      }
+    }
   }
 
   Future<void> close() async {
@@ -198,8 +209,10 @@ class LocalDbService {
       'full_body': json['full_body'],
       'mood': json['mood'],
       'mood_emoji': json['mood_emoji'],
+      'ai_generated': json['ai_generated'],
       'tags': json['tags'],
       'user_note': json['user_note'],
+      'user_mood': json['user_mood'],
       'snapshot': json['snapshot'],
     };
   }
@@ -421,6 +434,22 @@ class LocalDbService {
       limit: limit,
     );
 
+    return rows.map((row) => CaptureEntry.fromJson(row)).toList();
+  }
+
+  /// Load all captures for a specific calendar date, ordered by timestamp ASC.
+  ///
+  /// Uses SQLite's `date()` function to match on the local calendar date
+  /// of the stored ISO-8601 timestamp.
+  Future<List<CaptureEntry>> loadCapturesForDate(DateTime date) async {
+    final db = await _database;
+    final dateStr = _dateKey(date);
+    final rows = await db.query(
+      _tableCaptures,
+      where: "date(timestamp) = ?",
+      whereArgs: [dateStr],
+      orderBy: 'timestamp ASC',
+    );
     return rows.map((row) => CaptureEntry.fromJson(row)).toList();
   }
 
