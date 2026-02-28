@@ -31,7 +31,7 @@ class LocalDbService {
   static const _tableEntries = 'entries';
   static const _tableSettings = 'settings';
   static const _tableCaptures = 'captures';
-  static const _schemaVersion = 4;
+  static const _schemaVersion = 5;
 
   Database? _db;
 
@@ -89,7 +89,12 @@ class LocalDbService {
         location_data    TEXT,
         calendar_events  TEXT    NOT NULL DEFAULT '[]',
         processed_at     TEXT,
-        ai_insights      TEXT
+        ai_insights      TEXT,
+        source           TEXT    NOT NULL DEFAULT 'manual',
+        trigger          TEXT,
+        execution_duration_ms INTEGER,
+        errors           TEXT    NOT NULL DEFAULT '[]',
+        battery_level    INTEGER
       )
     ''');
     await db.execute('''
@@ -148,6 +153,25 @@ class LocalDbService {
         CREATE INDEX IF NOT EXISTS idx_captures_processed 
         ON $_tableCaptures(is_processed)
       ''');
+    }
+    if (oldVersion < 5) {
+      // v4 → v5: add background capture metadata columns
+      final newCols = {
+        'source': "TEXT NOT NULL DEFAULT 'manual'",
+        'trigger': 'TEXT',
+        'execution_duration_ms': 'INTEGER',
+        'errors': "TEXT NOT NULL DEFAULT '[]'",
+        'battery_level': 'INTEGER',
+      };
+      for (final entry in newCols.entries) {
+        try {
+          await db.execute(
+            'ALTER TABLE $_tableCaptures ADD COLUMN ${entry.key} ${entry.value}',
+          );
+        } catch (e) {
+          if (!e.toString().toLowerCase().contains('duplicate column')) rethrow;
+        }
+      }
     }
   }
 
@@ -380,15 +404,15 @@ class LocalDbService {
     int? limit,
   }) async {
     final db = await _database;
-    
+
     String? where;
     List<Object?>? whereArgs;
-    
+
     if (isProcessed != null) {
       where = 'is_processed = ?';
       whereArgs = [isProcessed ? 1 : 0];
     }
-    
+
     final rows = await db.query(
       _tableCaptures,
       where: where,
@@ -396,32 +420,28 @@ class LocalDbService {
       orderBy: 'timestamp DESC',
       limit: limit,
     );
-    
+
     return rows.map((row) => CaptureEntry.fromJson(row)).toList();
   }
 
   /// Delete a capture by ID.
   Future<void> deleteCapture(String id) async {
     final db = await _database;
-    await db.delete(
-      _tableCaptures,
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.delete(_tableCaptures, where: 'id = ?', whereArgs: [id]);
   }
 
   /// Get count of captures, optionally filtered by processed status.
   Future<int> countCaptures({bool? isProcessed}) async {
     final db = await _database;
-    
+
     String? where;
     List<Object?>? whereArgs;
-    
+
     if (isProcessed != null) {
       where = 'is_processed = ?';
       whereArgs = [isProcessed ? 1 : 0];
     }
-    
+
     final result = await db.rawQuery(
       'SELECT COUNT(*) as c FROM $_tableCaptures${where != null ? ' WHERE $where' : ''}',
       whereArgs,

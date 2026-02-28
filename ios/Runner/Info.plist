@@ -67,5 +67,13 @@
 	<!-- Motion & Fitness -->
 	<key>NSMotionUsageDescription</key>
 	<string>BodyPress needs access to your motion data to accurately track your activities.</string>
+	
+	<!-- Background Modes -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>location</string>
+		<string>processing</string>
+	</array>
 </dict>
 </plist>

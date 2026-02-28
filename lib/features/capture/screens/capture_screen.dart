@@ -573,7 +573,7 @@ class _CaptureScreenState extends State<CaptureScreen>
           ),
           style: GoogleFonts.inter(
             fontSize: 15,
-            color: dark ? Colors.white87 : Colors.black87,
+            color: dark ? Colors.white.withValues(alpha: 0.87) : Colors.black87,
             fontWeight: FontWeight.w400,
             height: 1.6,
           ),
@@ -623,7 +623,7 @@ class _CaptureScreenState extends State<CaptureScreen>
           ),
           style: GoogleFonts.inter(
             fontSize: 15,
-            color: dark ? Colors.white87 : Colors.black87,
+            color: dark ? Colors.white.withValues(alpha: 0.87) : Colors.black87,
             fontWeight: FontWeight.w400,
           ),
           onChanged: (value) => _userMood = value.isEmpty ? null : value,
@@ -1045,7 +1045,11 @@ class _CaptureScreenState extends State<CaptureScreen>
             style: GoogleFonts.inter(
               fontSize: 15,
               fontWeight: FontWeight.w400,
-              color: valueColor ?? (dark ? Colors.white87 : Colors.black87),
+              color:
+                  valueColor ??
+                  (dark
+                      ? Colors.white.withValues(alpha: 0.87)
+                      : Colors.black87),
               height: 1.6,
               letterSpacing: -0.1,
             ),
@@ -1302,7 +1306,9 @@ class _CaptureScreenState extends State<CaptureScreen>
                         event,
                         style: GoogleFonts.inter(
                           fontSize: 14,
-                          color: dark ? Colors.white87 : Colors.black87,
+                          color: dark
+                              ? Colors.white.withValues(alpha: 0.87)
+                              : Colors.black87,
                           height: 1.5,
                         ),
                       ),
@@ -1337,7 +1343,9 @@ class _CaptureScreenState extends State<CaptureScreen>
               style: GoogleFonts.inter(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: dark ? Colors.white87 : Colors.black87,
+                color: dark
+                    ? Colors.white.withValues(alpha: 0.87)
+                    : Colors.black87,
               ),
               textAlign: TextAlign.right,
             ),

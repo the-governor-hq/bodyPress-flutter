@@ -1,5 +1,32 @@
 import 'dart:convert';
 
+/// Where a capture originated.
+enum CaptureSource {
+  /// User tapped the capture button.
+  manual,
+
+  /// Fired on a periodic timer by WorkManager / BGTaskScheduler.
+  backgroundScheduled,
+
+  /// Fired by a context-aware event (geofence, activity, etc.).
+  backgroundTriggered,
+}
+
+/// What triggered a background capture.
+enum CaptureTrigger {
+  /// Time-based periodic schedule.
+  time,
+
+  /// Location-based geofence transition.
+  location,
+
+  /// Activity change detected (workout start/end).
+  activity,
+
+  /// Explicit manual capture by the user.
+  manual,
+}
+
 /// A comprehensive capture of the user's state at a moment in time.
 ///
 /// This includes health metrics, environmental data, location, calendar,
@@ -41,6 +68,21 @@ class CaptureEntry {
   /// AI-generated insights (if processed).
   final String? aiInsights;
 
+  /// Whether this was a manual or background capture.
+  final CaptureSource source;
+
+  /// What triggered this capture (relevant for background captures).
+  final CaptureTrigger? trigger;
+
+  /// How long the capture execution took.
+  final Duration? executionDuration;
+
+  /// Error messages encountered during capture (partial data).
+  final List<String> errors;
+
+  /// Device battery percentage at the time of capture.
+  final int? batteryLevel;
+
   const CaptureEntry({
     required this.id,
     required this.timestamp,
@@ -54,6 +96,11 @@ class CaptureEntry {
     this.calendarEvents = const [],
     this.processedAt,
     this.aiInsights,
+    this.source = CaptureSource.manual,
+    this.trigger,
+    this.executionDuration,
+    this.errors = const [],
+    this.batteryLevel,
   });
 
   CaptureEntry copyWith({
@@ -76,6 +123,14 @@ class CaptureEntry {
     bool clearProcessedAt = false,
     String? aiInsights,
     bool clearAiInsights = false,
+    CaptureSource? source,
+    CaptureTrigger? trigger,
+    bool clearTrigger = false,
+    Duration? executionDuration,
+    bool clearExecutionDuration = false,
+    List<String>? errors,
+    int? batteryLevel,
+    bool clearBatteryLevel = false,
   }) {
     return CaptureEntry(
       id: id ?? this.id,
@@ -94,6 +149,15 @@ class CaptureEntry {
       calendarEvents: calendarEvents ?? this.calendarEvents,
       processedAt: clearProcessedAt ? null : (processedAt ?? this.processedAt),
       aiInsights: clearAiInsights ? null : (aiInsights ?? this.aiInsights),
+      source: source ?? this.source,
+      trigger: clearTrigger ? null : (trigger ?? this.trigger),
+      executionDuration: clearExecutionDuration
+          ? null
+          : (executionDuration ?? this.executionDuration),
+      errors: errors ?? this.errors,
+      batteryLevel: clearBatteryLevel
+          ? null
+          : (batteryLevel ?? this.batteryLevel),
     );
   }
 
@@ -114,6 +178,11 @@ class CaptureEntry {
     'calendar_events': jsonEncode(calendarEvents),
     'processed_at': processedAt?.toIso8601String(),
     'ai_insights': aiInsights,
+    'source': source.name,
+    'trigger': trigger?.name,
+    'execution_duration_ms': executionDuration?.inMilliseconds,
+    'errors': jsonEncode(errors),
+    'battery_level': batteryLevel,
   };
 
   factory CaptureEntry.fromJson(Map<String, dynamic> json) {
@@ -122,6 +191,25 @@ class CaptureEntry {
     final environmentDataRaw = json['environment_data'] as String?;
     final locationDataRaw = json['location_data'] as String?;
     final calendarEventsRaw = json['calendar_events'] as String?;
+    final errorsRaw = json['errors'] as String?;
+
+    // Parse source enum (defaults to manual for backwards compat).
+    CaptureSource source = CaptureSource.manual;
+    if (json['source'] != null) {
+      source = CaptureSource.values.firstWhere(
+        (e) => e.name == json['source'],
+        orElse: () => CaptureSource.manual,
+      );
+    }
+
+    // Parse trigger enum.
+    CaptureTrigger? trigger;
+    if (json['trigger'] != null) {
+      trigger = CaptureTrigger.values.firstWhere(
+        (e) => e.name == json['trigger'],
+        orElse: () => CaptureTrigger.manual,
+      );
+    }
 
     return CaptureEntry(
       id: json['id'] as String,
@@ -154,6 +242,15 @@ class CaptureEntry {
           ? DateTime.parse(json['processed_at'] as String)
           : null,
       aiInsights: json['ai_insights'] as String?,
+      source: source,
+      trigger: trigger,
+      executionDuration: json['execution_duration_ms'] != null
+          ? Duration(milliseconds: json['execution_duration_ms'] as int)
+          : null,
+      errors: errorsRaw != null
+          ? (jsonDecode(errorsRaw) as List).cast<String>()
+          : const [],
+      batteryLevel: json['battery_level'] as int?,
     );
   }
 }

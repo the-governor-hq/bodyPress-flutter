@@ -8,12 +8,17 @@ import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/models/ai_models.dart';
+import '../../core/models/background_capture_config.dart';
 import '../../core/models/body_blog_entry.dart';
+import '../../core/models/capture_entry.dart';
 import '../../core/services/ai_service.dart';
+import '../../core/services/background_capture_service.dart';
 import '../../core/services/body_blog_service.dart';
+import '../../core/services/capture_service.dart';
 import '../../core/services/context_window_service.dart';
 import '../../core/services/health_service.dart';
 import '../../core/services/local_db_service.dart';
+import '../../core/services/notification_service.dart';
 import '../../core/services/permission_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -36,6 +41,8 @@ class _DebugScreenState extends State<DebugScreen> {
   final _context = ContextWindowService();
   final _blog = BodyBlogService();
   final _ai = AiService();
+  final _bgCapture = BackgroundCaptureService();
+  final _captureService = CaptureService();
 
   // ── state ──────────────────────────────────────────────
   bool _loading = true;
@@ -68,12 +75,21 @@ class _DebugScreenState extends State<DebugScreen> {
   String? _aiTestResponse;
   bool _aiTestRunning = false;
 
+  // Background captures
+  BackgroundCaptureConfig _bgConfig = BackgroundCaptureConfig.defaultConfig;
+  Map<String, String> _bgStats = {};
+  int _totalCaptures = 0;
+  int _bgCaptures = 0;
+  List<CaptureEntry> _recentCaptures = [];
+  bool _bgTriggerRunning = false;
+
   // Errors per section
   String? _permError;
   String? _dbError;
   String? _healthError;
   String? _contextError;
   String? _aiError;
+  String? _bgCaptureError;
 
   // Action state
   bool _actionRunning = false;
@@ -99,6 +115,7 @@ class _DebugScreenState extends State<DebugScreen> {
       _loadHealth(),
       _loadContext(),
       _loadAi(),
+      _loadBgCapture(),
     ]);
     if (mounted) setState(() => _loading = false);
   }
@@ -232,7 +249,142 @@ class _DebugScreenState extends State<DebugScreen> {
     }
   }
 
+  Future<void> _loadBgCapture() async {
+    try {
+      final config = await _bgCapture.loadConfig();
+      final stats = await _bgCapture.getStats();
+      final total = await _db.countCaptures();
+      final allCaptures = await _db.loadCaptures(limit: 200);
+      final bgCount = allCaptures
+          .where((c) => c.source != CaptureSource.manual)
+          .length;
+      final recent = await _db.loadCaptures(limit: 5);
+      if (mounted) {
+        setState(() {
+          _bgConfig = config;
+          _bgStats = stats;
+          _totalCaptures = total;
+          _bgCaptures = bgCount;
+          _recentCaptures = recent;
+          _bgCaptureError = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _bgCaptureError = e.toString());
+    }
+  }
+
   // ── actions ───────────────────────────────────────────
+
+  Future<void> _toggleBgCapture() async {
+    setState(() => _actionRunning = true);
+    try {
+      if (_bgConfig.enabled) {
+        await _bgCapture.disable();
+        _setActionMsg('Background captures disabled.');
+      } else {
+        await _bgCapture.enable();
+        _setActionMsg('Background captures enabled!');
+      }
+      await _loadBgCapture();
+    } catch (e) {
+      _setActionMsg('Error: $e');
+    }
+  }
+
+  Future<void> _triggerBgCaptureNow() async {
+    setState(() => _bgTriggerRunning = true);
+    try {
+      // Run a direct foreground capture tagged as backgroundScheduled for testing
+      final capture = await _captureService.createCapture(
+        includeHealth: _bgConfig.includeHealth,
+        includeEnvironment: _bgConfig.includeEnvironment,
+        includeLocation: _bgConfig.includeLocation,
+        includeCalendar: _bgConfig.includeCalendar,
+        source: CaptureSource.backgroundScheduled,
+        trigger: CaptureTrigger.time,
+      );
+      await _loadBgCapture();
+      _setActionMsg(
+        'Capture ${capture.id} saved '
+        '(${capture.executionDuration?.inMilliseconds ?? "?"} ms).',
+      );
+    } catch (e) {
+      _setActionMsg('Capture failed: $e');
+    } finally {
+      if (mounted) setState(() => _bgTriggerRunning = false);
+    }
+  }
+
+  Future<void> _resetBgStats() async {
+    setState(() => _actionRunning = true);
+    try {
+      await _bgCapture.resetStats();
+      await _loadBgCapture();
+      _setActionMsg('Background capture stats reset.');
+    } catch (e) {
+      _setActionMsg('Error: $e');
+    }
+  }
+
+  Future<void> _updateBgInterval(Duration interval) async {
+    setState(() => _actionRunning = true);
+    try {
+      final newConfig = _bgConfig.copyWith(interval: interval);
+      await _bgCapture.updateConfig(newConfig);
+      await _loadBgCapture();
+      _setActionMsg('Interval updated to ${interval.inMinutes} min.');
+    } catch (e) {
+      _setActionMsg('Error: $e');
+    }
+  }
+
+  Future<void> _toggleBgDataSource(String source) async {
+    BackgroundCaptureConfig newConfig;
+    switch (source) {
+      case 'health':
+        newConfig = _bgConfig.copyWith(includeHealth: !_bgConfig.includeHealth);
+        break;
+      case 'environment':
+        newConfig = _bgConfig.copyWith(
+          includeEnvironment: !_bgConfig.includeEnvironment,
+        );
+        break;
+      case 'location':
+        newConfig = _bgConfig.copyWith(
+          includeLocation: !_bgConfig.includeLocation,
+        );
+        break;
+      case 'calendar':
+        newConfig = _bgConfig.copyWith(
+          includeCalendar: !_bgConfig.includeCalendar,
+        );
+        break;
+      default:
+        return;
+    }
+    await _bgCapture.updateConfig(newConfig);
+    await _loadBgCapture();
+  }
+
+  Future<void> _toggleBgNotifications() async {
+    final newConfig = _bgConfig.copyWith(
+      notificationsEnabled: !_bgConfig.notificationsEnabled,
+    );
+    await _bgCapture.updateConfig(newConfig);
+    await _loadBgCapture();
+  }
+
+  Future<void> _requestNotificationPermission() async {
+    final notifService = NotificationService();
+    await notifService.initialize();
+    final granted = await notifService.requestPermission();
+    _setActionMsg(
+      granted
+          ? 'Notification permission granted.'
+          : 'Notification permission denied.',
+    );
+  }
 
   Future<void> _requestAllPermissions() async {
     setState(() => _actionRunning = true);
@@ -472,6 +624,23 @@ class _DebugScreenState extends State<DebugScreen> {
                               badge: '${_contextEntries.length} days',
                               errorText: _contextError,
                               child: _buildContextContent(dark),
+                            ),
+                            const SizedBox(height: 10),
+                            // ── background captures
+                            _buildSection(
+                              key: 'bgcapture',
+                              title: 'Background Captures',
+                              icon: Icons.sync_outlined,
+                              accent: Colors.cyan,
+                              dark: dark,
+                              surface: surface,
+                              dividerColor: dividerColor,
+                              badge: _bgConfig.enabled ? 'enabled' : 'disabled',
+                              badgeColor: _bgConfig.enabled
+                                  ? Colors.green
+                                  : Colors.grey,
+                              errorText: _bgCaptureError,
+                              child: _buildBgCaptureContent(dark),
                             ),
                             const SizedBox(height: 10),
                             // ── recent entries
@@ -1385,6 +1554,365 @@ class _DebugScreenState extends State<DebugScreen> {
           ),
         );
       },
+    );
+  }
+
+  // ─────────────────────── ACTIONS ───────────────────────
+
+  // ─────────────────────── BACKGROUND CAPTURES ───────────────────────
+
+  Widget _buildBgCaptureContent(bool dark) {
+    final mono = GoogleFonts.spaceMono(
+      fontSize: 11,
+      color: dark ? Colors.white60 : Colors.black54,
+    );
+    final intervalMin = _bgConfig.interval.inMinutes;
+    final lastCapture = _bgStats['last_capture'] ?? 'never';
+    final successes = _bgStats['successes'] ?? '0';
+    final failures = _bgStats['failures'] ?? '0';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Status & stats
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              _dbKv('Status', _bgConfig.enabled ? 'ON' : 'OFF', dark),
+              _dbKv('Interval', '${intervalMin}m', dark),
+              _dbKv('Total', '$_totalCaptures', dark),
+              _dbKv('Background', '$_bgCaptures', dark),
+              _dbKv('Successes', successes, dark),
+              _dbKv('Failures', failures, dark),
+            ],
+          ),
+        ),
+
+        // ── Last capture time
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+          child: Text('Last bg capture: $lastCapture', style: mono),
+        ),
+
+        Divider(height: 1, color: dark ? Colors.white12 : Colors.black12),
+
+        // ── Data source toggles
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+          child: Text(
+            'DATA SOURCES',
+            style: GoogleFonts.spaceMono(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: dark ? Colors.white38 : Colors.black38,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+        _bgToggleRow(
+          'Health',
+          Icons.monitor_heart_outlined,
+          _bgConfig.includeHealth,
+          () => _toggleBgDataSource('health'),
+          dark,
+        ),
+        _bgToggleRow(
+          'Environment',
+          Icons.cloud_outlined,
+          _bgConfig.includeEnvironment,
+          () => _toggleBgDataSource('environment'),
+          dark,
+        ),
+        _bgToggleRow(
+          'Location',
+          Icons.location_on_outlined,
+          _bgConfig.includeLocation,
+          () => _toggleBgDataSource('location'),
+          dark,
+        ),
+        _bgToggleRow(
+          'Calendar',
+          Icons.calendar_today_outlined,
+          _bgConfig.includeCalendar,
+          () => _toggleBgDataSource('calendar'),
+          dark,
+        ),
+        _bgToggleRow(
+          'Notifications',
+          Icons.notifications_outlined,
+          _bgConfig.notificationsEnabled,
+          _toggleBgNotifications,
+          dark,
+        ),
+
+        Divider(height: 1, color: dark ? Colors.white12 : Colors.black12),
+
+        // ── Interval selector
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+          child: Text(
+            'CAPTURE INTERVAL',
+            style: GoogleFonts.spaceMono(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: dark ? Colors.white38 : Colors.black38,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final min in [15, 30, 60, 120, 240])
+                _intervalChip(min, intervalMin == min, dark),
+            ],
+          ),
+        ),
+
+        Divider(height: 1, color: dark ? Colors.white12 : Colors.black12),
+
+        // ── Quiet hours
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+          child: Row(
+            children: [
+              Icon(
+                Icons.bedtime_outlined,
+                size: 14,
+                color: dark ? Colors.white38 : Colors.black38,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Quiet hours: '
+                '${_bgConfig.quietHoursStartHour.toString().padLeft(2, '0')}:'
+                '${_bgConfig.quietHoursStartMinute.toString().padLeft(2, '0')}'
+                ' → '
+                '${_bgConfig.quietHoursEndHour.toString().padLeft(2, '0')}:'
+                '${_bgConfig.quietHoursEndMinute.toString().padLeft(2, '0')}',
+                style: mono,
+              ),
+              const SizedBox(width: 8),
+              _chip(
+                _bgConfig.isInQuietHours() ? 'ACTIVE' : 'INACTIVE',
+                _bgConfig.isInQuietHours() ? Colors.orange : Colors.green,
+              ),
+            ],
+          ),
+        ),
+
+        Divider(height: 1, color: dark ? Colors.white12 : Colors.black12),
+
+        // ── Recent captures list
+        if (_recentCaptures.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+            child: Text(
+              'RECENT CAPTURES (${_recentCaptures.length})',
+              style: GoogleFonts.spaceMono(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: dark ? Colors.white38 : Colors.black38,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          ..._recentCaptures.map((c) => _buildCaptureRow(c, dark)),
+          Divider(height: 1, color: dark ? Colors.white12 : Colors.black12),
+        ],
+
+        // ── Actions
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _actionButton(
+                label: _bgConfig.enabled
+                    ? 'Disable background captures'
+                    : 'Enable background captures',
+                icon: _bgConfig.enabled
+                    ? Icons.pause_circle_outline
+                    : Icons.play_circle_outline,
+                color: _bgConfig.enabled ? Colors.orange : Colors.green,
+                onTap: _actionRunning ? null : _toggleBgCapture,
+              ),
+              const SizedBox(height: 8),
+              _actionButton(
+                label: _bgTriggerRunning
+                    ? 'Running capture…'
+                    : 'Trigger capture now',
+                icon: Icons.flash_on_outlined,
+                color: Colors.cyan,
+                onTap: (_actionRunning || _bgTriggerRunning)
+                    ? null
+                    : _triggerBgCaptureNow,
+              ),
+              const SizedBox(height: 8),
+              _actionButton(
+                label: 'Request notification permission',
+                icon: Icons.notifications_active_outlined,
+                color: Colors.indigo,
+                onTap: _requestNotificationPermission,
+              ),
+              const SizedBox(height: 8),
+              _actionButton(
+                label: 'Reset capture stats',
+                icon: Icons.restart_alt_outlined,
+                color: Colors.red,
+                onTap: _actionRunning ? null : _resetBgStats,
+                destructive: true,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _bgToggleRow(
+    String label,
+    IconData icon,
+    bool value,
+    VoidCallback onTap,
+    bool dark,
+  ) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: value
+                  ? Colors.cyan
+                  : (dark ? Colors.white24 : Colors.black26),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                color: dark ? Colors.white70 : Colors.black87,
+              ),
+            ),
+            const Spacer(),
+            Icon(
+              value ? Icons.check_circle : Icons.circle_outlined,
+              size: 18,
+              color: value
+                  ? Colors.cyan
+                  : (dark ? Colors.white24 : Colors.black26),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _intervalChip(int minutes, bool selected, bool dark) {
+    final label = minutes < 60 ? '${minutes}m' : '${minutes ~/ 60}h';
+    return GestureDetector(
+      onTap: () => _updateBgInterval(Duration(minutes: minutes)),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: selected
+              ? Colors.cyan.withValues(alpha: 0.2)
+              : (dark ? Colors.white10 : Colors.black.withValues(alpha: 0.06)),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected
+                ? Colors.cyan.withValues(alpha: 0.6)
+                : (dark ? Colors.white12 : Colors.black12),
+          ),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.spaceMono(
+            fontSize: 11,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+            color: selected
+                ? Colors.cyan
+                : (dark ? Colors.white54 : Colors.black54),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCaptureRow(CaptureEntry capture, bool dark) {
+    final fmt = DateFormat('MMM d HH:mm:ss');
+    final isManual = capture.source == CaptureSource.manual;
+    final sourceLabel = isManual ? 'MANUAL' : 'BG';
+    final sourceColor = isManual ? Colors.blue : Colors.cyan;
+    final durationMs = capture.executionDuration?.inMilliseconds;
+    final hasErrors = capture.errors.isNotEmpty;
+
+    // Data presence indicators
+    final parts = <String>[];
+    if (capture.healthData != null) parts.add('H');
+    if (capture.environmentData != null) parts.add('E');
+    if (capture.locationData != null) parts.add('L');
+    if (capture.calendarEvents.isNotEmpty) parts.add('C');
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+      child: Row(
+        children: [
+          Icon(
+            hasErrors
+                ? Icons.warning_amber_rounded
+                : Icons.check_circle_outline,
+            size: 14,
+            color: hasErrors ? Colors.orange : Colors.green,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  fmt.format(capture.timestamp),
+                  style: GoogleFonts.spaceMono(
+                    fontSize: 11,
+                    color: dark ? Colors.white70 : Colors.black87,
+                  ),
+                ),
+                Row(
+                  children: [
+                    Text(
+                      parts.join(' · '),
+                      style: GoogleFonts.spaceMono(
+                        fontSize: 9,
+                        color: dark ? Colors.white38 : Colors.black38,
+                      ),
+                    ),
+                    if (durationMs != null) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        '${durationMs}ms',
+                        style: GoogleFonts.spaceMono(
+                          fontSize: 9,
+                          color: dark ? Colors.white24 : Colors.black26,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+          _chip(sourceLabel, sourceColor),
+        ],
+      ),
     );
   }
 

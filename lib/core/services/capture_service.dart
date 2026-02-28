@@ -49,6 +49,8 @@ class CaptureService {
   /// - [userNote]: Optional user note or reflection
   /// - [userMood]: Optional user mood emoji
   /// - [tags]: Optional tags for categorization
+  /// - [source]: Whether this is a manual or background capture
+  /// - [trigger]: What triggered this capture
   Future<CaptureEntry> createCapture({
     bool includeHealth = true,
     bool includeEnvironment = true,
@@ -57,9 +59,13 @@ class CaptureService {
     String? userNote,
     String? userMood,
     List<String> tags = const [],
+    CaptureSource source = CaptureSource.manual,
+    CaptureTrigger? trigger,
   }) async {
+    final stopwatch = Stopwatch()..start();
     final timestamp = DateTime.now();
     final id = _generateId(timestamp);
+    final errors = <String>[];
 
     // Collect data from various sources in parallel
     final futures = <Future<dynamic>>[];
@@ -90,6 +96,8 @@ class CaptureService {
 
     final results = await Future.wait(futures);
 
+    stopwatch.stop();
+
     final capture = CaptureEntry(
       id: id,
       timestamp: timestamp,
@@ -101,6 +109,14 @@ class CaptureService {
       environmentData: results[1] as CaptureEnvironmentData?,
       locationData: results[2] as CaptureLocationData?,
       calendarEvents: results[3] as List<String>,
+      source: source,
+      trigger:
+          trigger ??
+          (source == CaptureSource.manual
+              ? CaptureTrigger.manual
+              : CaptureTrigger.time),
+      executionDuration: stopwatch.elapsed,
+      errors: errors,
     );
 
     // Save to database
