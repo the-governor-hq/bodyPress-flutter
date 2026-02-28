@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,8 +9,8 @@ import 'package:intl/intl.dart';
 import '../../../core/models/capture_entry.dart';
 import '../../../core/services/service_providers.dart';
 
-/// Capture tab — comprehensive data capture for AI analysis.
-/// Zen, minimalist design inspired by BodyBlog.
+/// Capture tab — camera-inspired data capture.
+/// Shutter button always visible at the bottom.
 class CaptureScreen extends ConsumerStatefulWidget {
   const CaptureScreen({super.key});
 
@@ -17,10 +19,10 @@ class CaptureScreen extends ConsumerStatefulWidget {
 }
 
 class _CaptureScreenState extends ConsumerState<CaptureScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final _captureService = ref.read(captureServiceProvider);
   final TextEditingController _noteController = TextEditingController();
-  final TextEditingController _moodController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
 
   bool _includeHealth = true;
   bool _includeEnvironment = true;
@@ -30,33 +32,56 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
   bool _isCapturing = false;
   String? _userNote;
   String? _userMood;
+  bool _noteExpanded = false;
 
   List<CaptureEntry>? _recentCaptures;
   int _unprocessedCount = 0;
 
-  late AnimationController _animController;
-  late Animation<double> _fadeAnimation;
+  late AnimationController _fadeController;
+  late AnimationController _pulseController;
+  late AnimationController _captureAnimController;
+  late Animation<double> _fadeAnim;
+  late Animation<double> _pulseAnim;
+  late Animation<double> _captureScaleAnim;
+
+  static const _moodOptions = ['😊', '😎', '😴', '😤', '😌', '🤔', '💪', '😔'];
 
   @override
   void initState() {
     super.initState();
-    _loadRecentCaptures();
-    _animController = AnimationController(
+
+    _fadeController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 500),
     );
-    _fadeAnimation = CurvedAnimation(
-      parent: _animController,
-      curve: Curves.easeOut,
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
+    _captureAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 120),
     );
-    _animController.forward();
+
+    _fadeAnim = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
+    _pulseAnim = Tween<double>(begin: 0.85, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+    _captureScaleAnim = Tween<double>(begin: 1.0, end: 0.88).animate(
+      CurvedAnimation(parent: _captureAnimController, curve: Curves.easeIn),
+    );
+
+    _fadeController.forward();
+    _loadRecentCaptures();
   }
 
   @override
   void dispose() {
     _noteController.dispose();
-    _moodController.dispose();
-    _animController.dispose();
+    _scrollController.dispose();
+    _fadeController.dispose();
+    _pulseController.dispose();
+    _captureAnimController.dispose();
     super.dispose();
   }
 
@@ -71,16 +96,18 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
         });
       }
     } catch (e) {
-      print('Error loading recent captures: $e');
+      debugPrint('Error loading recent captures: $e');
     }
   }
 
   Future<void> _createCapture() async {
     if (_isCapturing) return;
+    HapticFeedback.lightImpact();
 
-    setState(() {
-      _isCapturing = true;
-    });
+    await _captureAnimController.forward();
+    await _captureAnimController.reverse();
+
+    setState(() => _isCapturing = true);
 
     try {
       await _captureService.createCapture(
@@ -93,24 +120,12 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Capture created successfully'),
-            backgroundColor: Colors.green.shade600,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
-
-        // Reset user inputs
+        HapticFeedback.mediumImpact();
+        _showCaptureSuccessFlash();
         _noteController.clear();
-        _moodController.clear();
         _userNote = null;
         _userMood = null;
-
-        // Reload recent captures
+        setState(() => _noteExpanded = false);
         await _loadRecentCaptures();
       }
     } catch (e) {
@@ -127,13 +142,20 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
         );
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isCapturing = false;
-        });
-      }
+      if (mounted) setState(() => _isCapturing = false);
     }
   }
+
+  void _showCaptureSuccessFlash() {
+    final overlay = Overlay.of(context);
+    final entry = OverlayEntry(builder: (_) => const _CaptureSuccessFlash());
+    overlay.insert(entry);
+    Future.delayed(const Duration(milliseconds: 400), entry.remove);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // BUILD
+  // ─────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -143,69 +165,84 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
       child: Scaffold(
-        body: SafeArea(
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: RefreshIndicator(
-              onRefresh: _loadRecentCaptures,
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  // Zen top bar
-                  SliverToBoxAdapter(child: _buildTopBar(dark)),
-
-                  // Main content
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 28),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 24),
-
-                          // Stats section
-                          if (_recentCaptures != null)
-                            _buildStatsSection(theme, dark),
-
-                          const SizedBox(height: 32),
-
-                          // Data selection section
-                          _buildDataSelectionSection(theme, dark),
-
-                          const SizedBox(height: 32),
-
-                          // Context input section
-                          _buildContextSection(theme, dark),
-
-                          const SizedBox(height: 40),
-
-                          // Capture button
-                          _buildCaptureButton(theme, dark),
-
-                          const SizedBox(height: 48),
-
-                          // Recent captures header
-                          if (_recentCaptures != null &&
-                              _recentCaptures!.isNotEmpty)
-                            _buildRecentHeader(theme, dark),
-                        ],
+        backgroundColor: dark
+            ? const Color(0xFF0D0D0F)
+            : const Color(0xFFF6F6F8),
+        body: FadeTransition(
+          opacity: _fadeAnim,
+          child: Column(
+            children: [
+              // ── Scrollable content ──────────────────────────────────
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: _loadRecentCaptures,
+                  color: theme.colorScheme.primary,
+                  child: CustomScrollView(
+                    controller: _scrollController,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      // Status bar spacer + top bar
+                      SliverToBoxAdapter(
+                        child: SafeArea(
+                          bottom: false,
+                          child: _buildTopBar(theme, dark),
+                        ),
                       ),
-                    ),
+
+                      // Viewfinder
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                          child: _buildViewfinder(theme, dark),
+                        ),
+                      ),
+
+                      // Sensor chip row
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 14, 0, 0),
+                          child: _buildSensorChips(theme, dark),
+                        ),
+                      ),
+
+                      // Mood + note
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                          child: _buildContextRow(theme, dark),
+                        ),
+                      ),
+
+                      // Recent captures section
+                      if (_recentCaptures != null &&
+                          _recentCaptures!.isNotEmpty) ...[
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 28, 20, 12),
+                            child: _buildRecentHeader(theme, dark),
+                          ),
+                        ),
+                        SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) => _buildCaptureCard(
+                              theme,
+                              dark,
+                              _recentCaptures![index],
+                            ),
+                            childCount: _recentCaptures!.length,
+                          ),
+                        ),
+                      ],
+
+                      const SliverToBoxAdapter(child: SizedBox(height: 16)),
+                    ],
                   ),
-
-                  // Recent captures list
-                  if (_recentCaptures != null && _recentCaptures!.isNotEmpty)
-                    SliverList(
-                      delegate: SliverChildBuilderDelegate((context, index) {
-                        final capture = _recentCaptures![index];
-                        return _buildCaptureCard(theme, dark, capture);
-                      }, childCount: _recentCaptures!.length),
-                    ),
-
-                  const SliverToBoxAdapter(child: SizedBox(height: 32)),
-                ],
+                ),
               ),
-            ),
+
+              // ── Fixed bottom shutter bar — always visible ───────────
+              _buildCaptureBar(theme, dark),
+            ],
           ),
         ),
       ),
@@ -213,30 +250,46 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // TOP BAR — zen, minimal, like BodyBlog
+  // TOP BAR
   // ─────────────────────────────────────────────────────────────────────
 
-  Widget _buildTopBar(bool dark) {
+  Widget _buildTopBar(ThemeData theme, bool dark) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 12, 28, 0),
+      padding: const EdgeInsets.fromLTRB(24, 12, 12, 0),
       child: Row(
         children: [
           Text(
             'Capture',
             style: GoogleFonts.playfairDisplay(
-              fontSize: 28,
+              fontSize: 26,
               fontWeight: FontWeight.w700,
               color: dark ? Colors.white : Colors.black87,
               letterSpacing: -0.5,
             ),
           ),
           const Spacer(),
+          if (_recentCaptures != null) ...[
+            _buildMiniBadge(
+              dark,
+              '${_recentCaptures!.length}',
+              Icons.layers_outlined,
+              theme.colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            if (_unprocessedCount > 0)
+              _buildMiniBadge(
+                dark,
+                '$_unprocessedCount',
+                Icons.hourglass_empty_rounded,
+                Colors.amber.shade600,
+              ),
+          ],
           IconButton(
             onPressed: _loadRecentCaptures,
             icon: Icon(
               Icons.refresh_rounded,
               color: dark ? Colors.white38 : Colors.black26,
-              size: 22,
+              size: 20,
             ),
             tooltip: 'Refresh',
           ),
@@ -245,260 +298,303 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────
-  // STATS SECTION — elegant, minimalist
-  // ─────────────────────────────────────────────────────────────────────
-
-  Widget _buildStatsSection(ThemeData theme, bool dark) {
+  Widget _buildMiniBadge(bool dark, String value, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: dark
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.black.withValues(alpha: 0.03),
+        color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          _buildStatItem(
-            theme,
-            dark,
-            '${_recentCaptures!.length}',
-            'Total Captures',
-            Icons.camera_alt_outlined,
-          ),
-          Container(
-            width: 1,
-            height: 48,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  (dark ? Colors.white : Colors.black).withValues(alpha: 0),
-                  (dark ? Colors.white : Colors.black).withValues(alpha: 0.1),
-                  (dark ? Colors.white : Colors.black).withValues(alpha: 0),
-                ],
-              ),
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 4),
+          Text(
+            value,
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: color,
+              letterSpacing: -0.2,
             ),
-          ),
-          _buildStatItem(
-            theme,
-            dark,
-            '$_unprocessedCount',
-            'Unprocessed',
-            Icons.hourglass_empty_rounded,
-            highlight: _unprocessedCount > 0,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStatItem(
-    ThemeData theme,
-    bool dark,
-    String value,
-    String label,
-    IconData icon, {
-    bool highlight = false,
-  }) {
-    final color = highlight ? Colors.amber.shade600 : theme.colorScheme.primary;
+  // ─────────────────────────────────────────────────────────────────────
+  // VIEWFINDER — camera-like primed data preview
+  // ─────────────────────────────────────────────────────────────────────
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: color.withValues(alpha: 0.8), size: 28),
-        const SizedBox(height: 10),
-        Text(
-          value,
-          style: GoogleFonts.inter(
-            fontSize: 28,
-            fontWeight: FontWeight.w300,
-            color: dark ? Colors.white : Colors.black87,
-            letterSpacing: -0.5,
-          ),
+  Widget _buildViewfinder(ThemeData theme, bool dark) {
+    final activeSources = [
+      if (_includeHealth) (Icons.favorite_rounded, 'Health', Colors.redAccent),
+      if (_includeEnvironment)
+        (Icons.wb_sunny_rounded, 'Weather', Colors.orange),
+      if (_includeLocation)
+        (Icons.location_on_rounded, 'Location', Colors.blue),
+      if (_includeCalendar) (Icons.event_rounded, 'Calendar', Colors.purple),
+    ];
+
+    return Container(
+      height: 130,
+      decoration: BoxDecoration(
+        color: dark ? const Color(0xFF1A1A1D) : const Color(0xFFEEEEF2),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.15),
+          width: 1.5,
         ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-            letterSpacing: 0.5,
-            color: dark ? Colors.white38 : Colors.black38,
+      ),
+      child: Stack(
+        children: [
+          // Corner brackets (camera viewfinder corners)
+          Positioned(top: 10, left: 10, child: _cornerBracket(theme, 0)),
+          Positioned(
+            top: 10,
+            right: 10,
+            child: _cornerBracket(theme, math.pi / 2),
           ),
+          Positioned(
+            bottom: 10,
+            right: 10,
+            child: _cornerBracket(theme, math.pi),
+          ),
+          Positioned(
+            bottom: 10,
+            left: 10,
+            child: _cornerBracket(theme, -math.pi / 2),
+          ),
+
+          // Center content
+          Center(
+            child: activeSources.isEmpty
+                ? Text(
+                    'No sources selected',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: dark
+                          ? Colors.white.withValues(alpha: 0.3)
+                          : Colors.black.withValues(alpha: 0.3),
+                    ),
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Pulsing ready indicator
+                      AnimatedBuilder(
+                        animation: _pulseAnim,
+                        builder: (_, __) => Transform.scale(
+                          scale: _isCapturing ? 1.0 : _pulseAnim.value,
+                          child: Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _isCapturing
+                                  ? Colors.red
+                                  : theme.colorScheme.primary,
+                              boxShadow: [
+                                BoxShadow(
+                                  color:
+                                      (_isCapturing
+                                              ? Colors.red
+                                              : theme.colorScheme.primary)
+                                          .withValues(alpha: 0.6),
+                                  blurRadius: 8,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: activeSources.map((s) {
+                          final (icon, label, color) = s;
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(icon, color: color, size: 22),
+                                const SizedBox(height: 4),
+                                Text(
+                                  label,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.3,
+                                    color: dark
+                                        ? Colors.white54
+                                        : Colors.black45,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+          ),
+
+          // REC indicator (only while capturing)
+          Positioned(
+            top: 14,
+            right: 34,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: _isCapturing ? _recLabel() : const SizedBox.shrink(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _cornerBracket(ThemeData theme, double rotation) {
+    return Transform.rotate(
+      angle: rotation,
+      child: CustomPaint(
+        size: const Size(16, 16),
+        painter: _CornerBracketPainter(
+          color: theme.colorScheme.primary.withValues(alpha: 0.4),
         ),
-      ],
+      ),
+    );
+  }
+
+  Widget _recLabel() {
+    return Container(
+      key: const ValueKey('rec'),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.red,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        'REC',
+        style: GoogleFonts.inter(
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          color: Colors.white,
+          letterSpacing: 1.2,
+        ),
+      ),
     );
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // DATA SELECTION — elegant checkboxes
+  // SENSOR CHIP ROW — horizontal scrollable toggles, like lens modes
   // ─────────────────────────────────────────────────────────────────────
 
-  Widget _buildDataSelectionSection(ThemeData theme, bool dark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'DATA SOURCES',
-          style: GoogleFonts.inter(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 1.5,
-            color: theme.colorScheme.primary.withValues(alpha: 0.7),
+  Widget _buildSensorChips(ThemeData theme, bool dark) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.only(right: 20),
+      child: Row(
+        children: [
+          _sensorChip(
+            theme,
+            dark,
+            Icons.favorite_rounded,
+            'Health',
+            _includeHealth,
+            () => setState(() => _includeHealth = !_includeHealth),
+            Colors.redAccent,
           ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          width: 48,
-          height: 2,
-          decoration: BoxDecoration(
-            color: theme.colorScheme.primary.withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(1),
+          const SizedBox(width: 8),
+          _sensorChip(
+            theme,
+            dark,
+            Icons.wb_sunny_rounded,
+            'Weather',
+            _includeEnvironment,
+            () => setState(() => _includeEnvironment = !_includeEnvironment),
+            Colors.orange,
           ),
-        ),
-        const SizedBox(height: 24),
-        _buildDataOption(
-          theme,
-          dark,
-          'Health & Fitness',
-          'Steps, heart rate, calories, sleep, workouts',
-          Icons.favorite_outline,
-          _includeHealth,
-          (v) => setState(() => _includeHealth = v),
-        ),
-        const SizedBox(height: 20),
-        _buildDataOption(
-          theme,
-          dark,
-          'Environment',
-          'Temperature, weather, air quality, UV index',
-          Icons.wb_sunny_outlined,
-          _includeEnvironment,
-          (v) => setState(() => _includeEnvironment = v),
-        ),
-        const SizedBox(height: 20),
-        _buildDataOption(
-          theme,
-          dark,
-          'Location',
-          'GPS coordinates, altitude, city, region',
-          Icons.location_on_outlined,
-          _includeLocation,
-          (v) => setState(() => _includeLocation = v),
-        ),
-        const SizedBox(height: 20),
-        _buildDataOption(
-          theme,
-          dark,
-          'Calendar',
-          'Today\'s events and appointments',
-          Icons.event_outlined,
-          _includeCalendar,
-          (v) => setState(() => _includeCalendar = v),
-        ),
-      ],
+          const SizedBox(width: 8),
+          _sensorChip(
+            theme,
+            dark,
+            Icons.location_on_rounded,
+            'Location',
+            _includeLocation,
+            () => setState(() => _includeLocation = !_includeLocation),
+            Colors.blue,
+          ),
+          const SizedBox(width: 8),
+          _sensorChip(
+            theme,
+            dark,
+            Icons.event_rounded,
+            'Calendar',
+            _includeCalendar,
+            () => setState(() => _includeCalendar = !_includeCalendar),
+            Colors.purple,
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildDataOption(
+  Widget _sensorChip(
     ThemeData theme,
     bool dark,
-    String title,
-    String subtitle,
     IconData icon,
-    bool value,
-    ValueChanged<bool> onChanged,
+    String label,
+    bool active,
+    VoidCallback onTap,
+    Color accentColor,
   ) {
     return GestureDetector(
-      onTap: () => onChanged(!value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: value
-              ? theme.colorScheme.primary.withValues(alpha: 0.06)
+          color: active
+              ? accentColor.withValues(alpha: 0.15)
               : (dark
-                    ? Colors.white.withValues(alpha: 0.02)
-                    : Colors.black.withValues(alpha: 0.02)),
-          borderRadius: BorderRadius.circular(16),
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : Colors.black.withValues(alpha: 0.04)),
+          borderRadius: BorderRadius.circular(50),
           border: Border.all(
-            color: value
-                ? theme.colorScheme.primary.withValues(alpha: 0.3)
-                : (dark ? Colors.white : Colors.black).withValues(alpha: 0.06),
+            color: active
+                ? accentColor.withValues(alpha: 0.5)
+                : Colors.transparent,
             width: 1.5,
           ),
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: value
-                    ? theme.colorScheme.primary.withValues(alpha: 0.12)
-                    : (dark ? Colors.white : Colors.black).withValues(
-                        alpha: 0.04,
-                      ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                icon,
-                color: value
-                    ? theme.colorScheme.primary
-                    : (dark ? Colors.white38 : Colors.black38),
-                size: 22,
-              ),
+            Icon(
+              icon,
+              size: 16,
+              color: active
+                  ? accentColor
+                  : (dark ? Colors.white38 : Colors.black38),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.inter(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: value
-                          ? (dark ? Colors.white : Colors.black87)
-                          : (dark ? Colors.white60 : Colors.black54),
-                      letterSpacing: -0.2,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      color: dark ? Colors.white38 : Colors.black38,
-                      height: 1.4,
-                    ),
-                  ),
-                ],
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                color: active
+                    ? accentColor
+                    : (dark ? Colors.white54 : Colors.black45),
+                letterSpacing: 0.1,
               ),
-            ),
-            const SizedBox(width: 12),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: value ? theme.colorScheme.primary : Colors.transparent,
-                border: Border.all(
-                  color: value
-                      ? theme.colorScheme.primary
-                      : (dark ? Colors.white38 : Colors.black26),
-                  width: 2,
-                ),
-              ),
-              child: value
-                  ? const Icon(Icons.check, size: 16, color: Colors.white)
-                  : null,
             ),
           ],
         ),
@@ -507,182 +603,131 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // CONTEXT SECTION — note and mood input
+  // CONTEXT ROW — mood quick-select + expandable note
   // ─────────────────────────────────────────────────────────────────────
 
-  Widget _buildContextSection(ThemeData theme, bool dark) {
+  Widget _buildContextRow(ThemeData theme, bool dark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'ADD CONTEXT',
-          style: GoogleFonts.inter(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 1.5,
-            color: theme.colorScheme.primary.withValues(alpha: 0.7),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          width: 48,
-          height: 2,
-          decoration: BoxDecoration(
-            color: theme.colorScheme.primary.withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(1),
-          ),
-        ),
-        const SizedBox(height: 24),
-        TextField(
-          controller: _noteController,
-          maxLines: 4,
-          decoration: InputDecoration(
-            hintText: 'How are you feeling? What\'s on your mind?',
-            hintStyle: GoogleFonts.inter(
-              fontSize: 14,
-              color: dark ? Colors.white24 : Colors.black26,
-              fontWeight: FontWeight.w400,
-            ),
-            filled: true,
-            fillColor: dark
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.black.withValues(alpha: 0.02),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide(
-                color: (dark ? Colors.white : Colors.black).withValues(
-                  alpha: 0.08,
-                ),
-              ),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide(
-                color: (dark ? Colors.white : Colors.black).withValues(
-                  alpha: 0.08,
-                ),
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide(
-                color: theme.colorScheme.primary.withValues(alpha: 0.5),
-                width: 1.5,
-              ),
-            ),
-            contentPadding: const EdgeInsets.all(20),
-          ),
-          style: GoogleFonts.inter(
-            fontSize: 15,
-            color: dark ? Colors.white.withValues(alpha: 0.87) : Colors.black87,
-            fontWeight: FontWeight.w400,
-            height: 1.6,
-          ),
-          onChanged: (value) => _userNote = value.isEmpty ? null : value,
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _moodController,
-          decoration: InputDecoration(
-            hintText: 'Mood (emoji): 😊 😔 😴 😤 😌',
-            hintStyle: GoogleFonts.inter(
-              fontSize: 14,
-              color: dark ? Colors.white24 : Colors.black26,
-              fontWeight: FontWeight.w400,
-            ),
-            filled: true,
-            fillColor: dark
-                ? Colors.white.withValues(alpha: 0.03)
-                : Colors.black.withValues(alpha: 0.02),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide(
-                color: (dark ? Colors.white : Colors.black).withValues(
-                  alpha: 0.08,
-                ),
-              ),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide(
-                color: (dark ? Colors.white : Colors.black).withValues(
-                  alpha: 0.08,
-                ),
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide(
-                color: theme.colorScheme.primary.withValues(alpha: 0.5),
-                width: 1.5,
-              ),
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 20,
-              vertical: 18,
-            ),
-          ),
-          style: GoogleFonts.inter(
-            fontSize: 15,
-            color: dark ? Colors.white.withValues(alpha: 0.87) : Colors.black87,
-            fontWeight: FontWeight.w400,
-          ),
-          onChanged: (value) => _userMood = value.isEmpty ? null : value,
-        ),
-      ],
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────────────
-  // CAPTURE BUTTON — elegant, zen
-  // ─────────────────────────────────────────────────────────────────────
-
-  Widget _buildCaptureButton(ThemeData theme, bool dark) {
-    return Center(
-      child: TextButton(
-        onPressed: _isCapturing ? null : _createCapture,
-        style: TextButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 20),
-          backgroundColor: _isCapturing
-              ? (dark ? Colors.white12 : Colors.black12)
-              : theme.colorScheme.primary,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(30),
-          ),
-          elevation: 0,
-        ),
-        child: _isCapturing
-            ? SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    dark ? Colors.white38 : Colors.black38,
-                  ),
-                ),
-              )
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.camera_alt_outlined,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Capture Now',
-                    style: GoogleFonts.inter(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                      letterSpacing: 0.3,
+        // Mood quick-select row
+        SizedBox(
+          height: 44,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _moodOptions.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 6),
+            itemBuilder: (_, i) {
+              final emoji = _moodOptions[i];
+              final selected = _userMood == emoji;
+              return GestureDetector(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  setState(() => _userMood = selected ? null : emoji);
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: selected
+                        ? theme.colorScheme.primary.withValues(alpha: 0.2)
+                        : (dark
+                              ? Colors.white.withValues(alpha: 0.06)
+                              : Colors.black.withValues(alpha: 0.04)),
+                    border: Border.all(
+                      color: selected
+                          ? theme.colorScheme.primary.withValues(alpha: 0.6)
+                          : Colors.transparent,
+                      width: 2,
                     ),
                   ),
-                ],
+                  child: Center(
+                    child: Text(emoji, style: const TextStyle(fontSize: 20)),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // Expandable note input
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+          decoration: BoxDecoration(
+            color: dark
+                ? Colors.white.withValues(alpha: 0.04)
+                : Colors.black.withValues(alpha: 0.03),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: _noteExpanded
+                  ? theme.colorScheme.primary.withValues(alpha: 0.4)
+                  : (dark ? Colors.white : Colors.black).withValues(
+                      alpha: 0.08,
+                    ),
+              width: 1.5,
+            ),
+          ),
+          child: TextField(
+            controller: _noteController,
+            maxLines: _noteExpanded ? 4 : 1,
+            decoration: InputDecoration(
+              hintText: _noteExpanded
+                  ? 'How are you feeling? What\'s on your mind?'
+                  : 'Add a note...',
+              hintStyle: GoogleFonts.inter(
+                fontSize: 14,
+                color: dark ? Colors.white24 : Colors.black26,
+                fontWeight: FontWeight.w400,
               ),
-      ),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 18,
+                vertical: 14,
+              ),
+              prefixIcon: Icon(
+                Icons.edit_note_rounded,
+                size: 20,
+                color: dark
+                    ? Colors.white.withValues(alpha: 0.3)
+                    : Colors.black26,
+              ),
+              suffixIcon: _userNote != null && _userNote!.isNotEmpty
+                  ? IconButton(
+                      icon: Icon(
+                        Icons.clear_rounded,
+                        size: 18,
+                        color: dark
+                            ? Colors.white.withValues(alpha: 0.3)
+                            : Colors.black26,
+                      ),
+                      onPressed: () {
+                        _noteController.clear();
+                        setState(() {
+                          _userNote = null;
+                          _noteExpanded = false;
+                        });
+                      },
+                    )
+                  : null,
+            ),
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              color: dark
+                  ? Colors.white.withValues(alpha: 0.87)
+                  : Colors.black87,
+              fontWeight: FontWeight.w400,
+              height: 1.5,
+            ),
+            onTap: () => setState(() => _noteExpanded = true),
+            onChanged: (v) => setState(() => _userNote = v.isEmpty ? null : v),
+          ),
+        ),
+      ],
     );
   }
 
@@ -691,132 +736,131 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
   // ─────────────────────────────────────────────────────────────────────
 
   Widget _buildRecentHeader(ThemeData theme, bool dark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
         Text(
-          'RECENT CAPTURES',
+          'RECENT',
           style: GoogleFonts.inter(
             fontSize: 11,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 1.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.8,
             color: theme.colorScheme.primary.withValues(alpha: 0.7),
           ),
         ),
-        const SizedBox(height: 16),
-        Container(
-          width: 48,
-          height: 2,
-          decoration: BoxDecoration(
-            color: theme.colorScheme.primary.withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(1),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Container(
+            height: 1,
+            color: theme.colorScheme.primary.withValues(alpha: 0.12),
           ),
         ),
-        const SizedBox(height: 20),
       ],
     );
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // CAPTURE CARD — zen list item
+  // CAPTURE CARD — compact list item
   // ─────────────────────────────────────────────────────────────────────
 
   Widget _buildCaptureCard(ThemeData theme, bool dark, CaptureEntry capture) {
     final dateFormat = DateFormat('MMM d · h:mm a');
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: () => _showCaptureDetails(capture),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(18),
           child: Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: dark
-                  ? Colors.white.withValues(alpha: 0.03)
-                  : Colors.black.withValues(alpha: 0.02),
-              borderRadius: BorderRadius.circular(20),
+              color: dark ? Colors.white.withValues(alpha: 0.04) : Colors.white,
+              borderRadius: BorderRadius.circular(18),
               border: Border.all(
                 color: (dark ? Colors.white : Colors.black).withValues(
                   alpha: 0.06,
                 ),
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: capture.isProcessed
-                            ? Colors.green.shade400
-                            : Colors.amber.shade600,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        dateFormat.format(capture.timestamp),
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: dark ? Colors.white60 : Colors.black54,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                    ),
-                    if (capture.userMood != null)
-                      Text(
-                        capture.userMood!,
-                        style: const TextStyle(fontSize: 22),
-                      ),
-                  ],
-                ),
-                if (capture.userNote != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    capture.userNote!,
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                      color: dark ? Colors.white70 : Colors.black87,
-                      height: 1.6,
-                      letterSpacing: -0.1,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                // Status dot
+                Container(
+                  width: 8,
+                  height: 8,
+                  margin: const EdgeInsets.only(top: 2),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: capture.isProcessed
+                        ? Colors.green.shade400
+                        : Colors.amber.shade600,
                   ),
-                ],
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    if (capture.healthData != null)
-                      _buildDataBadge(theme, dark, Icons.favorite, 'Health'),
-                    if (capture.environmentData != null)
-                      _buildDataBadge(
-                        theme,
-                        dark,
-                        Icons.wb_sunny,
-                        'Environment',
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            dateFormat.format(capture.timestamp),
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: dark ? Colors.white60 : Colors.black54,
+                            ),
+                          ),
+                          const Spacer(),
+                          if (capture.userMood != null)
+                            Text(
+                              capture.userMood!,
+                              style: const TextStyle(fontSize: 18),
+                            ),
+                        ],
                       ),
-                    if (capture.locationData != null)
-                      _buildDataBadge(
-                        theme,
-                        dark,
-                        Icons.location_on,
-                        'Location',
+                      if (capture.userNote != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          capture.userNote!,
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            color: dark ? Colors.white70 : Colors.black87,
+                            height: 1.5,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: [
+                          if (capture.healthData != null)
+                            _microBadge(
+                              Icons.favorite_rounded,
+                              Colors.redAccent,
+                            ),
+                          if (capture.environmentData != null)
+                            _microBadge(Icons.wb_sunny_rounded, Colors.orange),
+                          if (capture.locationData != null)
+                            _microBadge(Icons.location_on_rounded, Colors.blue),
+                          if (capture.calendarEvents.isNotEmpty)
+                            _microBadge(Icons.event_rounded, Colors.purple),
+                        ],
                       ),
-                    if (capture.calendarEvents.isNotEmpty)
-                      _buildDataBadge(theme, dark, Icons.event, 'Calendar'),
-                  ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: dark
+                      ? Colors.white.withValues(alpha: 0.2)
+                      : Colors.black.withValues(alpha: 0.2),
                 ),
               ],
             ),
@@ -826,43 +870,145 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
     );
   }
 
-  Widget _buildDataBadge(
-    ThemeData theme,
-    bool dark,
-    IconData icon,
-    String label,
-  ) {
+  Widget _microBadge(IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: 13,
-            color: theme.colorScheme.primary.withValues(alpha: 0.8),
-          ),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: GoogleFonts.inter(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.primary.withValues(alpha: 0.9),
-              letterSpacing: 0.3,
-            ),
-          ),
-        ],
-      ),
+      child: Icon(icon, size: 12, color: color),
     );
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // DETAIL MODAL — zen bottom sheet
+  // CAPTURE BAR — always-visible shutter at the bottom
+  // ─────────────────────────────────────────────────────────────────────
+
+  Widget _buildCaptureBar(ThemeData theme, bool dark) {
+    final bg = dark ? const Color(0xFF141416) : Colors.white;
+    final border = (dark ? Colors.white : Colors.black).withValues(alpha: 0.07);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
+        border: Border(top: BorderSide(color: border)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 18),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Left stat — total
+              _shutterStat(
+                dark,
+                '${_recentCaptures?.length ?? 0}',
+                'captured',
+                theme.colorScheme.primary,
+              ),
+
+              const Spacer(),
+
+              // Shutter button
+              ScaleTransition(
+                scale: _captureScaleAnim,
+                child: GestureDetector(
+                  onTap: _isCapturing ? null : _createCapture,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _isCapturing
+                          ? (dark ? Colors.white12 : Colors.black12)
+                          : theme.colorScheme.primary,
+                      boxShadow: _isCapturing
+                          ? null
+                          : [
+                              BoxShadow(
+                                color: theme.colorScheme.primary.withValues(
+                                  alpha: 0.35,
+                                ),
+                                blurRadius: 20,
+                                spreadRadius: 2,
+                              ),
+                            ],
+                    ),
+                    child: _isCapturing
+                        ? Center(
+                            child: SizedBox(
+                              width: 26,
+                              height: 26,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  dark ? Colors.white60 : Colors.black38,
+                                ),
+                              ),
+                            ),
+                          )
+                        : const Icon(
+                            Icons.camera_alt_rounded,
+                            color: Colors.white,
+                            size: 28,
+                          ),
+                  ),
+                ),
+              ),
+
+              const Spacer(),
+
+              // Right stat — pending AI
+              _shutterStat(
+                dark,
+                '$_unprocessedCount',
+                'pending',
+                _unprocessedCount > 0
+                    ? Colors.amber.shade600
+                    : (dark
+                          ? Colors.white.withValues(alpha: 0.3)
+                          : Colors.black.withValues(alpha: 0.3)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _shutterStat(bool dark, String value, String label, Color color) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: GoogleFonts.inter(
+            fontSize: 22,
+            fontWeight: FontWeight.w300,
+            color: color,
+            letterSpacing: -0.5,
+          ),
+        ),
+        Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0.5,
+            color: dark
+                ? Colors.white.withValues(alpha: 0.3)
+                : Colors.black.withValues(alpha: 0.3),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // DETAIL MODAL
   // ─────────────────────────────────────────────────────────────────────
 
   void _showCaptureDetails(CaptureEntry capture) {
@@ -890,7 +1036,6 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
             ),
             child: Column(
               children: [
-                // Handle bar
                 Container(
                   margin: const EdgeInsets.only(top: 12),
                   width: 40,
@@ -1060,200 +1205,50 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
     );
   }
 
-  Widget _buildHealthData(ThemeData theme, bool dark, CaptureHealthData data) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(
-              Icons.favorite,
-              size: 18,
-              color: theme.colorScheme.primary.withValues(alpha: 0.7),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              'HEALTH DATA',
-              style: GoogleFonts.inter(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.2,
-                color: dark ? Colors.white38 : Colors.black38,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: dark
-                ? Colors.white.withValues(alpha: 0.04)
-                : Colors.black.withValues(alpha: 0.03),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            children: [
-              if (data.steps != null)
-                _buildMetric(dark, 'Steps', '${data.steps}'),
-              if (data.calories != null)
-                _buildMetric(
-                  dark,
-                  'Calories',
-                  '${data.calories?.toStringAsFixed(0)} kcal',
-                ),
-              if (data.distance != null)
-                _buildMetric(
-                  dark,
-                  'Distance',
-                  '${data.distance?.toStringAsFixed(2)} km',
-                ),
-              if (data.heartRate != null)
-                _buildMetric(dark, 'Heart Rate', '${data.heartRate} bpm'),
-              if (data.sleepHours != null)
-                _buildMetric(
-                  dark,
-                  'Sleep',
-                  '${data.sleepHours?.toStringAsFixed(1)} hours',
-                ),
-              if (data.workouts != null)
-                _buildMetric(dark, 'Workouts', '${data.workouts}'),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+  Widget _buildHealthData(ThemeData theme, bool dark, CaptureHealthData data) =>
+      _buildDataGroup(theme, dark, 'HEALTH DATA', Icons.favorite, [
+        if (data.steps != null) ('Steps', '${data.steps}'),
+        if (data.calories != null)
+          ('Calories', '${data.calories?.toStringAsFixed(0)} kcal'),
+        if (data.distance != null)
+          ('Distance', '${data.distance?.toStringAsFixed(2)} km'),
+        if (data.heartRate != null) ('Heart Rate', '${data.heartRate} bpm'),
+        if (data.sleepHours != null)
+          ('Sleep', '${data.sleepHours?.toStringAsFixed(1)} hours'),
+        if (data.workouts != null) ('Workouts', '${data.workouts}'),
+      ]);
 
   Widget _buildEnvironmentData(
     ThemeData theme,
     bool dark,
     CaptureEnvironmentData data,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(
-              Icons.wb_sunny,
-              size: 18,
-              color: theme.colorScheme.primary.withValues(alpha: 0.7),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              'ENVIRONMENT DATA',
-              style: GoogleFonts.inter(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.2,
-                color: dark ? Colors.white38 : Colors.black38,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: dark
-                ? Colors.white.withValues(alpha: 0.04)
-                : Colors.black.withValues(alpha: 0.03),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            children: [
-              if (data.temperature != null)
-                _buildMetric(
-                  dark,
-                  'Temperature',
-                  '${data.temperature?.toStringAsFixed(1)}°C',
-                ),
-              if (data.aqi != null)
-                _buildMetric(dark, 'Air Quality Index', '${data.aqi}'),
-              if (data.uvIndex != null)
-                _buildMetric(
-                  dark,
-                  'UV Index',
-                  '${data.uvIndex?.toStringAsFixed(1)}',
-                ),
-              if (data.weatherDescription != null)
-                _buildMetric(dark, 'Weather', data.weatherDescription!),
-              if (data.humidity != null)
-                _buildMetric(dark, 'Humidity', '${data.humidity}%'),
-              if (data.windSpeed != null)
-                _buildMetric(
-                  dark,
-                  'Wind Speed',
-                  '${data.windSpeed?.toStringAsFixed(1)} km/h',
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+  ) => _buildDataGroup(theme, dark, 'ENVIRONMENT', Icons.wb_sunny, [
+    if (data.temperature != null)
+      ('Temperature', '${data.temperature?.toStringAsFixed(1)}°C'),
+    if (data.aqi != null) ('Air Quality', '${data.aqi}'),
+    if (data.uvIndex != null)
+      ('UV Index', '${data.uvIndex?.toStringAsFixed(1)}'),
+    if (data.weatherDescription != null) ('Weather', data.weatherDescription!),
+    if (data.humidity != null) ('Humidity', '${data.humidity}%'),
+    if (data.windSpeed != null)
+      ('Wind Speed', '${data.windSpeed?.toStringAsFixed(1)} km/h'),
+  ]);
 
   Widget _buildLocationData(
     ThemeData theme,
     bool dark,
     CaptureLocationData data,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(
-              Icons.location_on,
-              size: 18,
-              color: theme.colorScheme.primary.withValues(alpha: 0.7),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              'LOCATION DATA',
-              style: GoogleFonts.inter(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.2,
-                color: dark ? Colors.white38 : Colors.black38,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: dark
-                ? Colors.white.withValues(alpha: 0.04)
-                : Colors.black.withValues(alpha: 0.03),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            children: [
-              _buildMetric(
-                dark,
-                'Coordinates',
-                '${data.latitude.toStringAsFixed(4)}, ${data.longitude.toStringAsFixed(4)}',
-              ),
-              if (data.altitude != null)
-                _buildMetric(
-                  dark,
-                  'Altitude',
-                  '${data.altitude?.toStringAsFixed(0)} m',
-                ),
-              if (data.city != null) _buildMetric(dark, 'City', data.city!),
-              if (data.region != null)
-                _buildMetric(dark, 'Region', data.region!),
-              if (data.country != null)
-                _buildMetric(dark, 'Country', data.country!),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+  ) => _buildDataGroup(theme, dark, 'LOCATION', Icons.location_on, [
+    (
+      'Coordinates',
+      '${data.latitude.toStringAsFixed(4)}, ${data.longitude.toStringAsFixed(4)}',
+    ),
+    if (data.altitude != null)
+      ('Altitude', '${data.altitude?.toStringAsFixed(0)} m'),
+    if (data.city != null) ('City', data.city!),
+    if (data.region != null) ('Region', data.region!),
+    if (data.country != null) ('Country', data.country!),
+  ]);
 
   Widget _buildCalendarData(ThemeData theme, bool dark, List<String> events) {
     return Column(
@@ -1289,34 +1284,85 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: events.map((event) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '•  ',
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        color: dark ? Colors.white60 : Colors.black54,
-                      ),
-                    ),
-                    Expanded(
-                      child: Text(
-                        event,
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          color: dark
-                              ? Colors.white.withValues(alpha: 0.87)
-                              : Colors.black87,
-                          height: 1.5,
+            children: events
+                .map(
+                  (e) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '•  ',
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: dark ? Colors.white60 : Colors.black54,
+                          ),
                         ),
-                      ),
+                        Expanded(
+                          child: Text(
+                            e,
+                            style: GoogleFonts.inter(
+                              fontSize: 14,
+                              color: dark
+                                  ? Colors.white.withValues(alpha: 0.87)
+                                  : Colors.black87,
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              );
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDataGroup(
+    ThemeData theme,
+    bool dark,
+    String title,
+    IconData icon,
+    List<(String, String)> metrics,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: theme.colorScheme.primary.withValues(alpha: 0.7),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              title,
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
+                color: dark ? Colors.white38 : Colors.black38,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: dark
+                ? Colors.white.withValues(alpha: 0.04)
+                : Colors.black.withValues(alpha: 0.03),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            children: metrics.map((m) {
+              final (label, value) = m;
+              return _buildMetric(dark, label, value);
             }).toList(),
           ),
         ),
@@ -1352,6 +1398,73 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CORNER BRACKET PAINTER
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _CornerBracketPainter extends CustomPainter {
+  final Color color;
+  const _CornerBracketPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.square;
+
+    canvas.drawPath(
+      Path()
+        ..moveTo(0, size.height)
+        ..lineTo(0, 0)
+        ..lineTo(size.width, 0),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_CornerBracketPainter old) => old.color != color;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CAPTURE SUCCESS FLASH OVERLAY
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _CaptureSuccessFlash extends StatefulWidget {
+  const _CaptureSuccessFlash();
+
+  @override
+  State<_CaptureSuccessFlash> createState() => _CaptureSuccessFlashState();
+}
+
+class _CaptureSuccessFlashState extends State<_CaptureSuccessFlash>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 350),
+  )..forward();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (_, __) => IgnorePointer(
+        child: Opacity(
+          opacity: (1 - _ctrl.value).clamp(0.0, 0.25),
+          child: Container(color: Colors.white),
+        ),
       ),
     );
   }

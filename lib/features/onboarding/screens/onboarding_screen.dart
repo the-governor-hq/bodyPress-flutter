@@ -409,28 +409,13 @@ class _WelcomePage extends StatelessWidget {
           GestureDetector(
             onTap: onSkip,
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
+              padding: const EdgeInsets.symmetric(vertical: 7),
               child: Text(
                 'Skip',
                 style: GoogleFonts.inter(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                   color: Colors.grey[500],
-                ),
-              ),
-            ),
-          ),
-
-          GestureDetector(
-            onTap: onDontShowAgain,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Text(
-                'Don\'t show again',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
-                  color: Colors.grey[400],
                 ),
               ),
             ),
