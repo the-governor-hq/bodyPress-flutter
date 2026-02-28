@@ -27,6 +27,7 @@ class _BodyBlogScreenState extends State<BodyBlogScreen> {
   List<BodyBlogEntry> _entries = [];
   int _currentPage = 0;
   bool _loading = true;
+  bool _refreshing = false;
   bool _loadingMore = false;
   static const int _pageSize = 7;
 
@@ -42,6 +43,8 @@ class _BodyBlogScreenState extends State<BodyBlogScreen> {
     super.dispose();
   }
 
+  /// Normal load — uses getTodayEntry() which returns instantly when
+  /// today's entry is persisted and no new captures exist.
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
@@ -54,6 +57,29 @@ class _BodyBlogScreenState extends State<BodyBlogScreen> {
       }
     } catch (e) {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Explicit refresh — collects fresh sensors + AI for today and
+  /// refreshes the displayed list.
+  Future<void> _refresh() async {
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+    try {
+      final fresh = await _blogService.refreshTodayEntry();
+      if (mounted) {
+        // Replace today's entry (index 0) with the refreshed version.
+        setState(() {
+          if (_entries.isNotEmpty) {
+            _entries = [fresh, ..._entries.skip(1)];
+          } else {
+            _entries = [fresh];
+          }
+          _refreshing = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _refreshing = false);
     }
   }
 
@@ -103,7 +129,11 @@ class _BodyBlogScreenState extends State<BodyBlogScreen> {
           // immediately, regardless of whether content is loading.
           child: Column(
             children: [
-              _TopBar(onDebug: () => context.push('/debug'), onRefresh: _load),
+              _TopBar(
+                onDebug: () => context.push('/debug'),
+                onRefresh: _refresh,
+                isRefreshing: _refreshing,
+              ),
               Expanded(
                 child: _loading
                     ? const Center(child: _ZenLoader())
@@ -126,6 +156,9 @@ class _BodyBlogScreenState extends State<BodyBlogScreen> {
                                     entry: _entries[i],
                                     onReadMore: () =>
                                         _openDetail(context, _entries[i]),
+                                    isToday: i == 0,
+                                    isRefreshing: _refreshing,
+                                    onRefresh: _refresh,
                                   ),
                                 ),
                               ),
@@ -190,10 +223,15 @@ class _BodyBlogScreenState extends State<BodyBlogScreen> {
 // ═════════════════════════════════════════════════════════════════════════════
 
 class _TopBar extends ConsumerWidget {
-  const _TopBar({required this.onDebug, required this.onRefresh});
+  const _TopBar({
+    required this.onDebug,
+    required this.onRefresh,
+    this.isRefreshing = false,
+  });
 
   final VoidCallback onDebug;
   final VoidCallback onRefresh;
+  final bool isRefreshing;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -249,15 +287,27 @@ class _TopBar extends ConsumerWidget {
             ),
             tooltip: themeTooltip,
           ),
-          IconButton(
-            onPressed: onRefresh,
-            icon: Icon(
-              Icons.refresh_rounded,
-              color: dark ? Colors.white38 : Colors.black26,
-              size: 22,
-            ),
-            tooltip: 'Refresh',
-          ),
+          isRefreshing
+              ? Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: dark ? Colors.white38 : Colors.black26,
+                    ),
+                  ),
+                )
+              : IconButton(
+                  onPressed: onRefresh,
+                  icon: Icon(
+                    Icons.refresh_rounded,
+                    color: dark ? Colors.white38 : Colors.black26,
+                    size: 22,
+                  ),
+                  tooltip: 'Refresh today',
+                ),
           IconButton(
             onPressed: onDebug,
             icon: Icon(
@@ -278,10 +328,19 @@ class _TopBar extends ConsumerWidget {
 // ═════════════════════════════════════════════════════════════════════════════
 
 class _BlogPage extends StatelessWidget {
-  const _BlogPage({required this.entry, required this.onReadMore});
+  const _BlogPage({
+    required this.entry,
+    required this.onReadMore,
+    this.isToday = false,
+    this.isRefreshing = false,
+    this.onRefresh,
+  });
 
   final BodyBlogEntry entry;
   final VoidCallback onReadMore;
+  final bool isToday;
+  final bool isRefreshing;
+  final VoidCallback? onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -290,7 +349,11 @@ class _BlogPage extends StatelessWidget {
     final primary = Theme.of(context).colorScheme.primary;
 
     return RefreshIndicator(
-      onRefresh: () async {}, // handled at parent level
+      onRefresh: () async {
+        if (isToday && onRefresh != null) {
+          onRefresh!();
+        }
+      },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
@@ -384,6 +447,64 @@ class _BlogPage extends StatelessWidget {
             _SnapshotGlance(snapshot: entry.snapshot),
 
             const SizedBox(height: 28),
+
+            // ── refresh day button (today only) ──
+            if (isToday)
+              Center(
+                child: isRefreshing
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: primary.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Refreshing with AI…',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                              color: dark ? Colors.white38 : Colors.black38,
+                            ),
+                          ),
+                        ],
+                      )
+                    : TextButton.icon(
+                        onPressed: onRefresh,
+                        icon: Icon(
+                          Icons.auto_awesome_rounded,
+                          size: 16,
+                          color: primary.withValues(alpha: 0.7),
+                        ),
+                        label: Text(
+                          'Refresh day',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: primary.withValues(alpha: 0.7),
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 10,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            side: BorderSide(
+                              color: primary.withValues(alpha: 0.15),
+                            ),
+                          ),
+                        ),
+                      ),
+              ),
+
+            if (isToday) const SizedBox(height: 20),
 
             // ── read more CTA ──
             if (entry.fullBody.isNotEmpty)

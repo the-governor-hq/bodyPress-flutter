@@ -477,4 +477,43 @@ class LocalDbService {
     );
     return (result.first['c'] as int?) ?? 0;
   }
+
+  /// Load only **unprocessed** captures for a specific calendar date.
+  ///
+  /// These are captures that have not yet been consumed by the AI journal
+  /// generation pipeline.
+  Future<List<CaptureEntry>> loadUnprocessedCapturesForDate(
+    DateTime date,
+  ) async {
+    final db = await _database;
+    final dateStr = _dateKey(date);
+    final rows = await db.query(
+      _tableCaptures,
+      where: "date(timestamp) = ? AND is_processed = 0",
+      whereArgs: [dateStr],
+      orderBy: 'timestamp ASC',
+    );
+    return rows.map((row) => CaptureEntry.fromJson(row)).toList();
+  }
+
+  /// Mark a list of captures as processed by setting `is_processed = 1`
+  /// and `processed_at` to the current time.
+  ///
+  /// Called after the AI successfully uses these captures to generate
+  /// or update a journal entry.
+  Future<void> markCapturesProcessed(List<String> captureIds) async {
+    if (captureIds.isEmpty) return;
+    final db = await _database;
+    final now = DateTime.now().toIso8601String();
+    final batch = db.batch();
+    for (final id in captureIds) {
+      batch.update(
+        _tableCaptures,
+        {'is_processed': 1, 'processed_at': now},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    }
+    await batch.commit(noResult: true);
+  }
 }

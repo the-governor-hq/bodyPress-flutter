@@ -1,6 +1,7 @@
 import 'package:device_calendar/device_calendar.dart';
 
 import '../models/body_blog_entry.dart';
+import '../models/capture_entry.dart';
 import 'ambient_scan_service.dart';
 import 'calendar_service.dart';
 import 'health_service.dart';
@@ -24,33 +25,85 @@ class BodyBlogService {
 
   // ── public API ──────────────────────────────────────────────────
 
-  /// Build today's blog entry from live device data and persist it.
+  /// Return today's journal entry **instantly** when possible.
   ///
-  /// Always collects a fresh [BodySnapshot] from sensors, then tries to
-  /// enrich the narrative with AI using today's stored captures.
-  /// Falls back gracefully to the local template when AI is unavailable.
+  /// Logic:
+  /// 1. If a persisted entry exists for today **and** there are zero
+  ///    unprocessed captures for today → return immediately (no sensors,
+  ///    no AI call).
+  /// 2. If a persisted entry exists but new (unprocessed) captures arrived
+  ///    → run AI enrichment with *only* the new captures, mark them
+  ///    processed, persist, and return.
+  /// 3. If no persisted entry exists → collect a live sensor snapshot,
+  ///    compose a local entry, enrich with AI, persist, and return.
   Future<BodyBlogEntry> getTodayEntry() async {
-    final snapshot = await _collectSnapshot();
-    final entry = _compose(DateTime.now(), snapshot);
+    final now = DateTime.now();
+    final existing = await _db.loadEntry(now);
+    final unprocessed = await _db.loadUnprocessedCapturesForDate(now);
 
-    // Preserve any existing user note & mood when refreshing today's entry.
-    final existing = await _db.loadEntry(entry.date);
-    var toSave = entry;
+    // ── fast path: today's entry exists and nothing new to add ──
+    if (existing != null && unprocessed.isEmpty) {
+      return existing;
+    }
+
+    // ── incremental update: entry exists + new captures ──
+    if (existing != null && unprocessed.isNotEmpty) {
+      final updated = await _applyAi(
+        now,
+        existing,
+        null,
+        captureOverride: unprocessed,
+      );
+      await _db.saveEntry(updated);
+      await _db.markCapturesProcessed(unprocessed.map((c) => c.id).toList());
+      return updated;
+    }
+
+    // ── cold start: no entry for today yet ──
+    final snapshot = await _collectSnapshot();
+    var entry = _compose(now, snapshot);
+    entry = await _applyAi(now, entry, snapshot);
+    await _db.saveEntry(entry);
+
+    // Mark any captures that existed for today as processed.
+    final todayCaptures = await _db.loadCapturesForDate(now);
+    if (todayCaptures.isNotEmpty) {
+      await _db.markCapturesProcessed(todayCaptures.map((c) => c.id).toList());
+    }
+
+    return entry;
+  }
+
+  /// Force a full refresh of today's entry — collects fresh sensor data,
+  /// runs AI with *all* today's captures, and persists.
+  ///
+  /// Called by the user-facing "refresh" button.
+  Future<BodyBlogEntry> refreshTodayEntry() async {
+    final now = DateTime.now();
+    final snapshot = await _collectSnapshot();
+    var entry = _compose(now, snapshot);
+
+    // Preserve existing user note & mood.
+    final existing = await _db.loadEntry(now);
     if (existing != null) {
       if (existing.userNote != null) {
-        toSave = toSave.copyWith(userNote: existing.userNote);
+        entry = entry.copyWith(userNote: existing.userNote);
       }
       if (existing.userMood != null) {
-        toSave = toSave.copyWith(userMood: existing.userMood);
+        entry = entry.copyWith(userMood: existing.userMood);
       }
     }
 
-    // ── AI enrichment ──────────────────────────────────────────────
-    toSave = await _applyAi(DateTime.now(), toSave, snapshot);
-    // ──────────────────────────────────────────────────────────────
+    entry = await _applyAi(now, entry, snapshot);
+    await _db.saveEntry(entry);
 
-    await _db.saveEntry(toSave);
-    return toSave;
+    // Mark every capture for today as processed.
+    final todayCaptures = await _db.loadCapturesForDate(now);
+    if (todayCaptures.isNotEmpty) {
+      await _db.markCapturesProcessed(todayCaptures.map((c) => c.id).toList());
+    }
+
+    return entry;
   }
 
   /// Force-regenerate a journal entry with AI for any [date].
@@ -88,6 +141,13 @@ class BodyBlogService {
 
     final updated = await _applyAi(date, base, snapshot);
     await _db.saveEntry(updated);
+
+    // Mark all captures for this date as processed.
+    final captures = await _db.loadCapturesForDate(date);
+    if (captures.isNotEmpty) {
+      await _db.markCapturesProcessed(captures.map((c) => c.id).toList());
+    }
+
     return updated;
   }
 
@@ -126,15 +186,22 @@ class BodyBlogService {
 
   /// Try to enrich [entry] with AI. Returns the updated entry on success,
   /// or the original [entry] unchanged when AI is unavailable.
+  ///
+  /// When [captureOverride] is provided, those captures are sent to the AI
+  /// instead of loading all captures for the date (used for incremental
+  /// updates with only the new unprocessed captures).
   Future<BodyBlogEntry> _applyAi(
     DateTime date,
     BodyBlogEntry entry,
-    BodySnapshot? snapshotFallback,
-  ) async {
+    BodySnapshot? snapshotFallback, {
+    List<CaptureEntry>? captureOverride,
+  }) async {
     try {
-      final captures = await _db
-          .loadCapturesForDate(date)
-          .timeout(const Duration(seconds: 5), onTimeout: () => []);
+      final captures =
+          captureOverride ??
+          await _db
+              .loadCapturesForDate(date)
+              .timeout(const Duration(seconds: 5), onTimeout: () => []);
 
       final result = await _ai
           .generate(
