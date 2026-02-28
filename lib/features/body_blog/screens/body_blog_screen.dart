@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../../../core/models/body_blog_entry.dart';
 import '../../../core/services/service_providers.dart';
 import '../../../core/theme/theme_provider.dart';
+import '../../shared/widgets/health_permission_card.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Body Blog — Medium-inspired, Zen home screen
@@ -134,6 +135,9 @@ class _BodyBlogScreenState extends ConsumerState<BodyBlogScreen> {
                 onRefresh: _refresh,
                 isRefreshing: _refreshing,
               ),
+              // Health permission banner — only visible when health access
+              // is not granted on the current device.
+              const HealthPermissionCard(),
               Expanded(
                 child: _loading
                     ? const Center(child: _ZenLoader())

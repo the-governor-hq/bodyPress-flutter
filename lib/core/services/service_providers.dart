@@ -99,3 +99,18 @@ final bodyBlogServiceProvider = Provider<BodyBlogService>((ref) {
     ai: ref.read(journalAiServiceProvider),
   );
 });
+
+// ── Health permission reactive status ───────────────────────────────────────
+
+/// A [FutureProvider] that resolves to whether health permissions are granted.
+/// Invalidate this provider after a permission change to force a refresh:
+///   ref.invalidate(healthPermissionStatusProvider);
+final healthPermissionStatusProvider = FutureProvider<bool>((ref) async {
+  return ref.read(healthServiceProvider).hasPermissions();
+});
+
+/// A [FutureProvider] that resolves to whether the health platform is available
+/// on this device (HealthKit on iOS, Health Connect installed on Android).
+final healthAvailableProvider = FutureProvider<bool>((ref) async {
+  return ref.read(healthServiceProvider).isHealthAvailable();
+});

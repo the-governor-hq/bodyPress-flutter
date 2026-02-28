@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,6 +32,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
 
   int _page = 0;
   bool _busy = false;
+
+  /// null = not requested yet  |  true = granted  |  false = denied / skipped
+  bool? _healthGranted;
 
   late final AnimationController _breathe;
 
@@ -103,8 +108,36 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
         onTimeout: () => false,
       );
     } catch (_) {}
-    if (mounted) setState(() => _busy = false);
-    _next();
+
+    // Check whether the OS actually granted access.
+    final granted = await _healthService.hasPermissions().timeout(
+      const Duration(seconds: 5),
+      onTimeout: () => false,
+    );
+
+    if (mounted) {
+      setState(() {
+        _healthGranted = granted;
+        _busy = false;
+      });
+    }
+
+    // Only auto-advance when the user said yes; otherwise stay on this page
+    // so we can show the "Open Settings" fallback.
+    if (granted) _next();
+  }
+
+  Future<void> _openHealthSettings() async {
+    await _healthService.openHealthConnectApp();
+    // Re-check after returning from settings — the user may have just allowed.
+    final granted = await _healthService.hasPermissions().timeout(
+      const Duration(seconds: 5),
+      onTimeout: () => false,
+    );
+    if (mounted) {
+      setState(() => _healthGranted = granted);
+      if (granted) _next();
+    }
   }
 
   Future<void> _requestCalendar() async {
@@ -178,22 +211,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
                       busy: _busy,
                       breathe: _breathe,
                     ),
-                    _PermissionStep(
-                      icon: Icons.monitor_heart_outlined,
+                    _HealthPermissionStep(
                       accent: const Color(0xFFD4738A),
-                      title: 'Body\nIntelligence',
-                      subtitle: 'HEALTH DATA ACCESS',
-                      body:
-                          'Access to Apple Health or Google Health Connect lets '
-                          'BodyPress read your steps, heart rate, sleep patterns, '
-                          'calories burned, and workouts.\n\n'
-                          'This paints a holistic picture of your daily vitality '
-                          'so you can make informed choices.',
-                      privacy:
-                          'Health data stays on your device. '
-                          'We only read — never write or upload.',
-                      ctaLabel: 'Allow Health Data',
+                      healthGranted: _healthGranted,
                       onAllow: _requestHealth,
+                      onOpenSettings: _openHealthSettings,
                       onSkip: _next,
                       busy: _busy,
                       breathe: _breathe,
@@ -553,6 +575,519 @@ class _PermissionStep extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 28),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  HEALTH PERMISSION STEP  (OS-aware, 2-phase)
+// ═════════════════════════════════════════════════════════════════════════════
+
+class _HealthPermissionStep extends StatelessWidget {
+  const _HealthPermissionStep({
+    required this.accent,
+    required this.healthGranted,
+    required this.onAllow,
+    required this.onOpenSettings,
+    required this.onSkip,
+    required this.busy,
+    required this.breathe,
+  });
+
+  final Color accent;
+  final bool? healthGranted; // null = not requested yet, false = denied
+  final VoidCallback onAllow;
+  final VoidCallback onOpenSettings;
+  final VoidCallback onSkip;
+  final bool busy;
+  final AnimationController breathe;
+
+  bool get _isIOS => Platform.isIOS;
+
+  String get _platformName => _isIOS ? 'Apple Health' : 'Health Connect';
+
+  @override
+  Widget build(BuildContext context) {
+    final denied = healthGranted == false;
+    return denied ? _buildDenied(context) : _buildInitial(context);
+  }
+
+  // ── Phase 1: initial ask ─────────────────────────────────────────────────
+
+  Widget _buildInitial(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              children: [
+                const SizedBox(height: 36),
+
+                // Health orb with custom inner illustration
+                _HealthOrb(size: 140, accent: accent, breathe: breathe),
+
+                const SizedBox(height: 36),
+
+                Text(
+                  'Body\nIntelligence',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.playfairDisplay(
+                    fontSize: 34,
+                    fontWeight: FontWeight.w700,
+                    height: 1.2,
+                    color: dark ? Colors.white : Colors.black87,
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
+                // OS-specific subtitle badge
+                _OsBadge(
+                  label: 'HEALTH DATA ACCESS',
+                  platformName: _platformName,
+                  accent: accent,
+                  isIOS: _isIOS,
+                ),
+
+                const SizedBox(height: 28),
+
+                Text(
+                  _isIOS
+                      ? 'BodyPress reads your steps, heart rate, sleep '
+                            'patterns, calories, and workouts from Apple Health.\n\n'
+                            'This paints a holistic picture of your daily vitality '
+                            'so you can make informed choices.'
+                      : 'Connecting Google Health Connect lets BodyPress read '
+                            'your steps, heart rate, sleep, calories, and workouts.\n\n'
+                            'This paints a holistic picture of your daily vitality '
+                            'so you can make informed choices.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    height: 1.75,
+                    fontWeight: FontWeight.w300,
+                    color: dark ? Colors.white60 : Colors.black54,
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                _PrivacyNote(
+                  text:
+                      'Health data stays on your device. '
+                      'We only read — never write or upload.',
+                  accent: accent,
+                ),
+
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+        ),
+
+        // Pinned CTAs
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            children: [
+              _PillButton(
+                label: 'Allow $_platformName',
+                color: accent,
+                onPressed: busy ? null : onAllow,
+                busy: busy,
+              ),
+              const SizedBox(height: 14),
+              GestureDetector(
+                onTap: busy ? null : onSkip,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    'Not now',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.grey[500],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 28),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Phase 2: denied — guide to settings ─────────────────────────────────
+
+  Widget _buildDenied(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    const warnColor = Color(0xFFE07A5F);
+
+    final steps = _isIOS
+        ? const [
+            ('Open Settings', Icons.settings_outlined),
+            ('Tap Privacy & Security → Health', Icons.privacy_tip_outlined),
+            ('Select BodyPress → allow all', Icons.check_circle_outline),
+          ]
+        : const [
+            ('Open Health Connect app', Icons.favorite_border),
+            ('Tap App permissions → BodyPress', Icons.apps_outlined),
+            ('Turn on all BodyPress data types', Icons.toggle_on_outlined),
+          ];
+
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              children: [
+                const SizedBox(height: 36),
+
+                // Warning orb
+                _ZenOrb(
+                  size: 140,
+                  color: warnColor,
+                  breathe: breathe,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Icon(
+                        _isIOS
+                            ? Icons.favorite_border
+                            : Icons.monitor_heart_outlined,
+                        size: 38,
+                        color: warnColor,
+                      ),
+                      Positioned(
+                        bottom: 2,
+                        right: 2,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: dark
+                                ? const Color(0xFF1A1A2E)
+                                : Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          padding: const EdgeInsets.all(2),
+                          child: Icon(
+                            Icons.settings,
+                            size: 14,
+                            color: warnColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 36),
+
+                Text(
+                  'One More\nStep',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.playfairDisplay(
+                    fontSize: 34,
+                    fontWeight: FontWeight.w700,
+                    height: 1.2,
+                    color: dark ? Colors.white : Colors.black87,
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
+                Text(
+                  _isIOS
+                      ? 'GRANT ACCESS IN SETTINGS'
+                      : 'GRANT ACCESS IN HEALTH CONNECT',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 2.0,
+                    color: warnColor.withValues(alpha: 0.8),
+                  ),
+                ),
+
+                const SizedBox(height: 28),
+
+                Text(
+                  _isIOS
+                      ? 'BodyPress needs permission in your iPhone Settings.\n'
+                            'It only takes a few seconds:'
+                      : 'BodyPress needs permission in the\nHealth Connect app. '
+                            'Just follow these steps:',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    height: 1.75,
+                    fontWeight: FontWeight.w300,
+                    color: dark ? Colors.white60 : Colors.black54,
+                  ),
+                ),
+
+                const SizedBox(height: 28),
+
+                // Step-by-step guide
+                ...steps.asMap().entries.map((e) {
+                  final idx = e.key;
+                  final (label, icon) = e.value;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: warnColor.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Text(
+                              '${idx + 1}',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: warnColor,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Icon(
+                          icon,
+                          size: 18,
+                          color: warnColor.withValues(alpha: 0.7),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            label,
+                            style: GoogleFonts.inter(
+                              fontSize: 13.5,
+                              height: 1.4,
+                              fontWeight: FontWeight.w400,
+                              color: dark ? Colors.white70 : Colors.black87,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+        ),
+
+        // Pinned CTAs
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            children: [
+              _PillButton(
+                label: _isIOS ? 'Open Settings' : 'Open Health Connect',
+                color: warnColor,
+                onPressed: busy ? null : onOpenSettings,
+                busy: busy,
+              ),
+              const SizedBox(height: 14),
+              GestureDetector(
+                onTap: busy ? null : onSkip,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    'Skip for now',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.grey[500],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 28),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Health orb — custom ECG-line illustration
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _HealthOrb extends StatelessWidget {
+  const _HealthOrb({
+    required this.size,
+    required this.accent,
+    required this.breathe,
+  });
+
+  final double size;
+  final Color accent;
+  final AnimationController breathe;
+
+  @override
+  Widget build(BuildContext context) {
+    return _ZenOrb(
+      size: size,
+      color: accent,
+      breathe: breathe,
+      child: CustomPaint(
+        size: Size(size * 0.44, size * 0.44),
+        painter: _EcgHeartPainter(color: accent),
+      ),
+    );
+  }
+}
+
+/// Draws a stylised heart shape with a tiny ECG blip inside it.
+class _EcgHeartPainter extends CustomPainter {
+  const _EcgHeartPainter({required this.color});
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    // ── heart shape ──────────────────────────────────────────────────────
+    final heartPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+    final cx = w / 2;
+    final cy = h * 0.45;
+
+    // Bezier-based heart centred at (cx, cy)
+    path.moveTo(cx, cy + h * 0.28);
+    path.cubicTo(
+      cx - w * 0.12,
+      cy + h * 0.12,
+      cx - w * 0.52,
+      cy - h * 0.08,
+      cx - w * 0.50,
+      cy - h * 0.28,
+    );
+    path.cubicTo(
+      cx - w * 0.48,
+      cy - h * 0.46,
+      cx - w * 0.06,
+      cy - h * 0.50,
+      cx,
+      cy - h * 0.30,
+    );
+    path.cubicTo(
+      cx + w * 0.06,
+      cy - h * 0.50,
+      cx + w * 0.48,
+      cy - h * 0.46,
+      cx + w * 0.50,
+      cy - h * 0.28,
+    );
+    path.cubicTo(
+      cx + w * 0.52,
+      cy - h * 0.08,
+      cx + w * 0.12,
+      cy + h * 0.12,
+      cx,
+      cy + h * 0.28,
+    );
+    path.close();
+    canvas.drawPath(path, heartPaint);
+
+    // ── ECG blip overlay ────────────────────────────────────────────────
+    final ecgPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.75)
+      ..strokeWidth = 1.6
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    final y0 = cy + h * 0.04;
+    final ecgPath = Path()
+      ..moveTo(cx - w * 0.28, y0)
+      ..lineTo(cx - w * 0.10, y0)
+      ..lineTo(cx - w * 0.04, y0 - h * 0.22)
+      ..lineTo(cx + w * 0.02, y0 + h * 0.14)
+      ..lineTo(cx + w * 0.08, y0)
+      ..lineTo(cx + w * 0.28, y0);
+    canvas.drawPath(ecgPath, ecgPaint);
+  }
+
+  @override
+  bool shouldRepaint(_EcgHeartPainter old) => old.color != color;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  OS badge  (Apple Health | Google Health Connect chip)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _OsBadge extends StatelessWidget {
+  const _OsBadge({
+    required this.label,
+    required this.platformName,
+    required this.accent,
+    required this.isIOS,
+  });
+
+  final String label;
+  final String platformName;
+  final Color accent;
+  final bool isIOS;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 2.0,
+            color: accent.withValues(alpha: 0.8),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: accent.withValues(alpha: 0.25), width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isIOS ? Icons.favorite : Icons.monitor_heart_outlined,
+                size: 13,
+                color: accent,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                platformName,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: accent,
+                ),
+              ),
             ],
           ),
         ),

@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:health/health.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class HealthService {
   final Health _health = Health();
@@ -17,7 +20,10 @@ class HealthService {
   Future<bool> requestAuthorization() async {
     try {
       final permissions = types.map((type) => HealthDataAccess.READ).toList();
-      final authorized = await _health.requestAuthorization(types, permissions: permissions);
+      final authorized = await _health.requestAuthorization(
+        types,
+        permissions: permissions,
+      );
       return authorized;
     } catch (e) {
       print('Error requesting health authorization: $e');
@@ -34,6 +40,40 @@ class HealthService {
       print('Error checking health permissions: $e');
       return false;
     }
+  }
+
+  /// Returns true if the health platform is available.
+  /// On Android this means Health Connect is installed.
+  /// On iOS HealthKit is always available.
+  Future<bool> isHealthAvailable() async {
+    if (Platform.isIOS) return true;
+    try {
+      // On Android, try to check permissions — if it throws the SDK is absent.
+      await _health.hasPermissions([HealthDataType.STEPS]);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Opens the OS-specific settings page where the user can grant health
+  /// permissions.  On iOS this goes to Settings > Privacy > Health.
+  /// On Android this opens the app-level permission settings (where
+  /// Activity Recognition / Body Sensors are listed). If the user needs to
+  /// open Health Connect itself, [openHealthConnectApp] handles that.
+  Future<void> openHealthSettings() async {
+    await openAppSettings();
+  }
+
+  /// Android only — launches the Health Connect app so the user can grant
+  /// access there.  Falls back to [openAppSettings] on iOS.
+  ///
+  /// Note: health package 11.x does not expose a direct Health Connect
+  /// launcher, so we open the system app-settings page which lists
+  /// Activity Recognition / Body Sensors on Android and the app's
+  /// Privacy → Health entry on iOS.
+  Future<void> openHealthConnectApp() async {
+    await openAppSettings();
   }
 
   // Get health data for a date range
@@ -58,7 +98,7 @@ class HealthService {
   Future<int> getTodaySteps() async {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
-    
+
     try {
       final healthData = await _health.getHealthDataFromTypes(
         types: [HealthDataType.STEPS],
@@ -72,7 +112,7 @@ class HealthService {
           totalSteps += (data.value as NumericHealthValue).numericValue.toInt();
         }
       }
-      
+
       return totalSteps;
     } catch (e) {
       print('Error getting steps: $e');
@@ -102,7 +142,7 @@ class HealthService {
   Future<double> getTodayCalories() async {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
-    
+
     try {
       final healthData = await _health.getHealthDataFromTypes(
         types: [HealthDataType.ACTIVE_ENERGY_BURNED],
@@ -116,7 +156,7 @@ class HealthService {
           totalCalories += (data.value as NumericHealthValue).numericValue;
         }
       }
-      
+
       return totalCalories;
     } catch (e) {
       print('Error getting calories: $e');
@@ -128,7 +168,7 @@ class HealthService {
   Future<double> getTodayDistance() async {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
-    
+
     try {
       final healthData = await _health.getHealthDataFromTypes(
         types: [HealthDataType.DISTANCE_DELTA],
@@ -142,7 +182,7 @@ class HealthService {
           totalDistance += (data.value as NumericHealthValue).numericValue;
         }
       }
-      
+
       return totalDistance;
     } catch (e) {
       print('Error getting distance: $e');
@@ -155,7 +195,7 @@ class HealthService {
     final now = DateTime.now();
     final startOfYesterday = DateTime(now.year, now.month, now.day - 1, 18, 0);
     final endOfToday = DateTime(now.year, now.month, now.day, 12, 0);
-    
+
     try {
       final healthData = await _health.getHealthDataFromTypes(
         types: [HealthDataType.SLEEP_ASLEEP],
@@ -169,7 +209,7 @@ class HealthService {
           totalSleepMinutes += (data.value as NumericHealthValue).numericValue;
         }
       }
-      
+
       return totalSleepMinutes / 60; // Convert to hours
     } catch (e) {
       print('Error getting sleep: $e');
@@ -181,7 +221,7 @@ class HealthService {
   Future<int> getTodayAverageHeartRate() async {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
-    
+
     try {
       final healthData = await _health.getHealthDataFromTypes(
         types: [HealthDataType.HEART_RATE],
@@ -199,7 +239,7 @@ class HealthService {
           count++;
         }
       }
-      
+
       return count > 0 ? (totalHeartRate / count).round() : 0;
     } catch (e) {
       print('Error getting heart rate: $e');
@@ -211,7 +251,7 @@ class HealthService {
   Future<int> getTodayWorkoutCount() async {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
-    
+
     try {
       final healthData = await _health.getHealthDataFromTypes(
         types: [HealthDataType.WORKOUT],
