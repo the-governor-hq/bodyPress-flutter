@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/router/app_router.dart';
 import 'core/services/background_capture_service.dart';
+import 'core/services/local_db_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
 
@@ -13,6 +14,12 @@ void main() async {
   // if the user previously enabled it).
   final bgService = BackgroundCaptureService();
   await bgService.initialize();
+
+  // Check whether the user opted out of seeing the intro.
+  final db = LocalDbService();
+  final skipOnboarding = (await db.getSetting('skip_onboarding')) == 'true';
+
+  AppRouter.init(skipOnboarding: skipOnboarding);
 
   runApp(const ProviderScope(child: MyApp()));
 }

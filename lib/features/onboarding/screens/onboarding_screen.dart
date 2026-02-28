@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/services/health_service.dart';
+import '../../../core/services/local_db_service.dart';
 import '../../../core/services/permission_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -26,6 +27,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   final _pageCtrl = PageController();
   final _permissionService = PermissionService();
   final _healthService = HealthService();
+  final _dbService = LocalDbService();
 
   int _page = 0;
   bool _busy = false;
@@ -62,6 +64,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   void _finish() => context.go('/journal');
+
+  /// Skip this time only — go straight to journal.
+  void _skip() => context.go('/journal');
+
+  /// Persist the skip preference and go to journal.
+  Future<void> _dontShowAgain() async {
+    await _dbService.setSetting('skip_onboarding', 'true');
+    if (mounted) context.go('/journal');
+  }
 
   // ── permission helpers ────────────────────────────────────────
 
@@ -142,7 +153,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   physics: const NeverScrollableScrollPhysics(),
                   onPageChanged: (i) => setState(() => _page = i),
                   children: [
-                    _WelcomePage(onBegin: _next, breathe: _breathe),
+                    _WelcomePage(
+                      onBegin: _next,
+                      onSkip: _skip,
+                      onDontShowAgain: _dontShowAgain,
+                      breathe: _breathe,
+                    ),
                     _PermissionStep(
                       icon: Icons.explore_outlined,
                       accent: const Color(0xFF6B8E6B),
@@ -285,9 +301,16 @@ class _StepBar extends StatelessWidget {
 // ═════════════════════════════════════════════════════════════════════════════
 
 class _WelcomePage extends StatelessWidget {
-  const _WelcomePage({required this.onBegin, required this.breathe});
+  const _WelcomePage({
+    required this.onBegin,
+    required this.onSkip,
+    required this.onDontShowAgain,
+    required this.breathe,
+  });
 
   final VoidCallback onBegin;
+  final VoidCallback onSkip;
+  final VoidCallback onDontShowAgain;
   final AnimationController breathe;
 
   @override
@@ -359,7 +382,40 @@ class _WelcomePage extends StatelessWidget {
           // ── CTA ──
           _PillButton(label: 'Begin', color: primary, onPressed: onBegin),
 
-          const SizedBox(height: 48),
+          const SizedBox(height: 16),
+
+          // ── Skip / Don't show again ──
+          GestureDetector(
+            onTap: onSkip,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Text(
+                'Skip',
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey[500],
+                ),
+              ),
+            ),
+          ),
+
+          GestureDetector(
+            onTap: onDontShowAgain,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Text(
+                'Don\'t show again',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.grey[400],
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 32),
         ],
       ),
     );
