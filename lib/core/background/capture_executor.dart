@@ -30,12 +30,12 @@ Future<bool> captureExecutorCallback() async {
 
     // 2. Bail out early if disabled or in quiet hours
     if (!config.enabled) {
-      print('[CaptureExecutor] Background captures disabled — skipping.');
+      debugPrint('[CaptureExecutor] Background captures disabled — skipping.');
       return true;
     }
 
     if (config.isInQuietHours()) {
-      print('[CaptureExecutor] Inside quiet hours — skipping.');
+      debugPrint('[CaptureExecutor] Inside quiet hours — skipping.');
       return true;
     }
 
@@ -56,7 +56,7 @@ Future<bool> captureExecutorCallback() async {
           .timeout(const Duration(seconds: 25));
     } on TimeoutException {
       errors.add('Capture timed out after 25 s');
-      print('[CaptureExecutor] Capture timed out.');
+      debugPrint('[CaptureExecutor] Capture timed out.');
     }
 
     stopwatch.stop();
@@ -89,11 +89,11 @@ Future<bool> captureExecutorCallback() async {
           );
         } catch (e) {
           // Non-fatal — don't fail the whole task for a notification issue.
-          print('[CaptureExecutor] Notification error: $e');
+          debugPrint('[CaptureExecutor] Notification error: $e');
         }
       }
 
-      print(
+      debugPrint(
         '[CaptureExecutor] Capture ${capture.id} saved '
         '(${stopwatch.elapsedMilliseconds} ms).',
       );
@@ -103,7 +103,7 @@ Future<bool> captureExecutorCallback() async {
 
     return true;
   } catch (e, st) {
-    print('[CaptureExecutor] Unhandled error: $e\n$st');
+    debugPrint('[CaptureExecutor] Unhandled error: $e\n$st');
 
     // Best-effort: bump the failure counter even on crash.
     try {

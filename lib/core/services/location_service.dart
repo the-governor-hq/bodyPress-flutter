@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
 class LocationService {
@@ -14,7 +15,7 @@ class LocationService {
         ),
       );
     } catch (e) {
-      print('Error getting location: $e');
+      debugPrint('Error getting location: $e');
       return null;
     }
   }
@@ -37,14 +38,14 @@ class LocationService {
   // Check location permission
   Future<bool> _checkPermission() async {
     LocationPermission permission = await Geolocator.checkPermission();
-    
+
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
         return false;
       }
     }
-    
+
     if (permission == LocationPermission.deniedForever) {
       return false;
     }

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:health/health.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -26,7 +27,7 @@ class HealthService {
       );
       return authorized;
     } catch (e) {
-      print('Error requesting health authorization: $e');
+      debugPrint('Error requesting health authorization: $e');
       return false;
     }
   }
@@ -37,7 +38,7 @@ class HealthService {
       final permissions = await _health.hasPermissions(types);
       return permissions ?? false;
     } catch (e) {
-      print('Error checking health permissions: $e');
+      debugPrint('Error checking health permissions: $e');
       return false;
     }
   }
@@ -89,7 +90,7 @@ class HealthService {
       );
       return healthData;
     } catch (e) {
-      print('Error getting health data: $e');
+      debugPrint('Error getting health data: $e');
       return [];
     }
   }
@@ -115,7 +116,7 @@ class HealthService {
 
       return totalSteps;
     } catch (e) {
-      print('Error getting steps: $e');
+      debugPrint('Error getting steps: $e');
       return 0;
     }
   }
@@ -133,7 +134,7 @@ class HealthService {
       );
       return healthData;
     } catch (e) {
-      print('Error getting heart rate: $e');
+      debugPrint('Error getting heart rate: $e');
       return [];
     }
   }
@@ -159,7 +160,7 @@ class HealthService {
 
       return totalCalories;
     } catch (e) {
-      print('Error getting calories: $e');
+      debugPrint('Error getting calories: $e');
       return 0;
     }
   }
@@ -185,7 +186,7 @@ class HealthService {
 
       return totalDistance;
     } catch (e) {
-      print('Error getting distance: $e');
+      debugPrint('Error getting distance: $e');
       return 0;
     }
   }
@@ -212,7 +213,7 @@ class HealthService {
 
       return totalSleepMinutes / 60; // Convert to hours
     } catch (e) {
-      print('Error getting sleep: $e');
+      debugPrint('Error getting sleep: $e');
       return 0;
     }
   }
@@ -242,7 +243,7 @@ class HealthService {
 
       return count > 0 ? (totalHeartRate / count).round() : 0;
     } catch (e) {
-      print('Error getting heart rate: $e');
+      debugPrint('Error getting heart rate: $e');
       return 0;
     }
   }
@@ -261,7 +262,7 @@ class HealthService {
 
       return healthData.length;
     } catch (e) {
-      print('Error getting workouts: $e');
+      debugPrint('Error getting workouts: $e');
       return 0;
     }
   }

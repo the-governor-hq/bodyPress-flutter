@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
 /// Computed GPS metrics derived from position stream data.
@@ -123,7 +124,7 @@ class GpsMetricsService {
             );
           },
           onError: (e) {
-            print('GPS metrics stream error: $e');
+            debugPrint('GPS metrics stream error: $e');
           },
         );
 
@@ -154,7 +155,7 @@ class GpsMetricsService {
         positionCount: 1,
       );
     } catch (e) {
-      print('Error getting GPS snapshot: $e');
+      debugPrint('Error getting GPS snapshot: $e');
       return GpsMetrics.empty();
     }
   }

@@ -250,7 +250,7 @@ class _PatternBody extends StatelessWidget {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                child: _SectionLabel('Energy Distribution', theme),
+                child: _sectionLabel('Energy Distribution', theme),
               ),
             ),
             SliverToBoxAdapter(
@@ -270,7 +270,7 @@ class _PatternBody extends StatelessWidget {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                child: _SectionLabel('Top Themes', theme),
+                child: _sectionLabel('Top Themes', theme),
               ),
             ),
             SliverToBoxAdapter(
@@ -290,7 +290,7 @@ class _PatternBody extends StatelessWidget {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                child: _SectionLabel('Keywords', theme),
+                child: _sectionLabel('Keywords', theme),
               ),
             ),
             SliverToBoxAdapter(
@@ -310,7 +310,7 @@ class _PatternBody extends StatelessWidget {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                child: _SectionLabel('Recurring Signals', theme),
+                child: _sectionLabel('Recurring Signals', theme),
               ),
             ),
             SliverToBoxAdapter(
@@ -329,7 +329,7 @@ class _PatternBody extends StatelessWidget {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-                child: _SectionLabel('Recent Moments', theme),
+                child: _sectionLabel('Recent Moments', theme),
               ),
             ),
             SliverList(
@@ -530,7 +530,7 @@ class _AnalysisBanner extends StatelessWidget {
   }
 }
 
-Widget _SectionLabel(String label, ThemeData theme) => Text(
+Widget _sectionLabel(String label, ThemeData theme) => Text(
   label.toUpperCase(),
   style: GoogleFonts.inter(
     fontSize: 11,

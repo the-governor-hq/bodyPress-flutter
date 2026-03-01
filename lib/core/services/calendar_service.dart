@@ -1,4 +1,5 @@
 import 'package:device_calendar/device_calendar.dart';
+import 'package:flutter/foundation.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 class CalendarService {
@@ -10,7 +11,7 @@ class CalendarService {
       final permissionsGranted = await _deviceCalendar.requestPermissions();
       return permissionsGranted.isSuccess && (permissionsGranted.data ?? false);
     } catch (e) {
-      print('Error requesting calendar permissions: $e');
+      debugPrint('Error requesting calendar permissions: $e');
       return false;
     }
   }
@@ -21,7 +22,7 @@ class CalendarService {
       final permissionsGranted = await _deviceCalendar.hasPermissions();
       return permissionsGranted.isSuccess && (permissionsGranted.data ?? false);
     } catch (e) {
-      print('Error checking calendar permissions: $e');
+      debugPrint('Error checking calendar permissions: $e');
       return false;
     }
   }
@@ -32,7 +33,7 @@ class CalendarService {
       final calendarsResult = await _deviceCalendar.retrieveCalendars();
       return calendarsResult.data ?? [];
     } catch (e) {
-      print('Error getting calendars: $e');
+      debugPrint('Error getting calendars: $e');
       return [];
     }
   }
@@ -50,7 +51,7 @@ class CalendarService {
       );
       return eventsResult.data ?? [];
     } catch (e) {
-      print('Error getting events: $e');
+      debugPrint('Error getting events: $e');
       return [];
     }
   }
@@ -103,10 +104,12 @@ class CalendarService {
         location: location,
       );
 
-      final createEventResult = await _deviceCalendar.createOrUpdateEvent(event);
+      final createEventResult = await _deviceCalendar.createOrUpdateEvent(
+        event,
+      );
       return createEventResult?.data;
     } catch (e) {
-      print('Error creating event: $e');
+      debugPrint('Error creating event: $e');
       return null;
     }
   }
@@ -117,10 +120,13 @@ class CalendarService {
     required String eventId,
   }) async {
     try {
-      final deleteResult = await _deviceCalendar.deleteEvent(calendarId, eventId);
+      final deleteResult = await _deviceCalendar.deleteEvent(
+        calendarId,
+        eventId,
+      );
       return deleteResult.isSuccess;
     } catch (e) {
-      print('Error deleting event: $e');
+      debugPrint('Error deleting event: $e');
       return false;
     }
   }

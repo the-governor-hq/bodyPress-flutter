@@ -261,7 +261,7 @@ class _EnvironmentScreenState extends State<EnvironmentScreen> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: _aqiColor(aq.usAqi).withOpacity(0.1),
+                        color: _aqiColor(aq.usAqi).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(Icons.air, color: _aqiColor(aq.usAqi)),
@@ -324,7 +324,7 @@ class _EnvironmentScreenState extends State<EnvironmentScreen> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: _uvColor(uv.current).withOpacity(0.1),
+                        color: _uvColor(uv.current).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
@@ -424,7 +424,7 @@ class _EnvironmentScreenState extends State<EnvironmentScreen> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.teal.withOpacity(0.1),
+                        color: Colors.teal.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Icon(Icons.air, color: Colors.teal),
@@ -565,7 +565,7 @@ class _EnvironmentScreenState extends State<EnvironmentScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(icon, color: color),

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 /// Data model for the ambient-scan API response.
@@ -300,11 +301,11 @@ class AmbientScanService {
         final json = jsonDecode(response.body) as Map<String, dynamic>;
         return AmbientScanData.fromJson(json);
       } else {
-        print('Ambient scan error: HTTP ${response.statusCode}');
+        debugPrint('Ambient scan error: HTTP ${response.statusCode}');
         return null;
       }
     } catch (e) {
-      print('Error fetching ambient scan data: $e');
+      debugPrint('Error fetching ambient scan data: $e');
       return null;
     }
   }
@@ -321,11 +322,11 @@ class AmbientScanService {
         final json = jsonDecode(response.body) as Map<String, dynamic>;
         return AmbientScanData.fromJson(json);
       } else {
-        print('Ambient scan error: HTTP ${response.statusCode}');
+        debugPrint('Ambient scan error: HTTP ${response.statusCode}');
         return null;
       }
     } catch (e) {
-      print('Error fetching ambient scan data: $e');
+      debugPrint('Error fetching ambient scan data: $e');
       return null;
     }
   }
@@ -352,7 +353,7 @@ class AmbientScanService {
         (lon as num).toDouble(),
       );
     } catch (e) {
-      print('Error fetching ambient scan via GeoIP: $e');
+      debugPrint('Error fetching ambient scan via GeoIP: $e');
       return null;
     }
   }

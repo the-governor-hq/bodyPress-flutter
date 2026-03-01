@@ -111,7 +111,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
     } catch (_) {}
 
     // Check whether the OS actually granted access.
-    final granted = await _healthService.hasPermissions().timeout(
+    await _healthService.hasPermissions().timeout(
       const Duration(seconds: 5),
       onTimeout: () => false,
     );

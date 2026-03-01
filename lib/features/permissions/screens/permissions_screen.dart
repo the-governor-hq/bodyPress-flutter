@@ -45,7 +45,7 @@ class _PermissionsScreenState extends ConsumerState<PermissionsScreen> {
       await _permissionService.requestAllPermissions().timeout(
         const Duration(seconds: 10),
         onTimeout: () {
-          print('Permission request timed out');
+          debugPrint('Permission request timed out');
           return {};
         },
       );
@@ -54,7 +54,7 @@ class _PermissionsScreenState extends ConsumerState<PermissionsScreen> {
       await _healthService.requestAuthorization().timeout(
         const Duration(seconds: 10),
         onTimeout: () {
-          print('Health permission request timed out');
+          debugPrint('Health permission request timed out');
           return false;
         },
       );
@@ -64,7 +64,7 @@ class _PermissionsScreenState extends ConsumerState<PermissionsScreen> {
         context.go('/journal');
       }
     } catch (e) {
-      print('Error requesting permissions: $e');
+      debugPrint('Error requesting permissions: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -121,7 +121,7 @@ class _PermissionsScreenState extends ConsumerState<PermissionsScreen> {
                           leading: Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: permission.color.withOpacity(0.1),
+                              color: permission.color.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Icon(

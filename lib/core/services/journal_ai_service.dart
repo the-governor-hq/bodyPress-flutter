@@ -266,11 +266,13 @@ Never give medical advice. Celebrate movement. Acknowledge fatigue. Find beauty 
     }
     if (s.aqiUs != null) envParts.add('AQI ${s.aqiUs}');
     if (s.uvIndex != null) envParts.add('UV ${s.uvIndex!.toStringAsFixed(1)}');
-    if (envParts.isNotEmpty)
+    if (envParts.isNotEmpty) {
       buf.writeln('  Environment: ${envParts.join(' · ')}');
+    }
 
-    if (s.city != null && s.city!.isNotEmpty)
+    if (s.city != null && s.city!.isNotEmpty) {
       buf.writeln('  Location: ${s.city}');
+    }
 
     if (s.calendarEvents.isNotEmpty) {
       buf.writeln('  Calendar: ${s.calendarEvents.join(' · ')}');

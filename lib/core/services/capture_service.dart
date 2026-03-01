@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import '../models/capture_entry.dart';
 import 'ambient_scan_service.dart';
 import 'calendar_service.dart';
@@ -181,7 +183,7 @@ class CaptureService {
         workouts: workouts > 0 ? workouts : null,
       );
     } catch (e) {
-      print('Error collecting health data: $e');
+      debugPrint('Error collecting health data: $e');
       return null;
     }
   }
@@ -215,7 +217,7 @@ class CaptureService {
         conditions: ambientData.conditions.description,
       );
     } catch (e) {
-      print('Error collecting environment data: $e');
+      debugPrint('Error collecting environment data: $e');
       return null;
     }
   }
@@ -244,7 +246,7 @@ class CaptureService {
           country = ambientData.meta.country;
         }
       } catch (e) {
-        print('Error getting location metadata: $e');
+        debugPrint('Error getting location metadata: $e');
       }
 
       return CaptureLocationData(
@@ -257,7 +259,7 @@ class CaptureService {
         country: country,
       );
     } catch (e) {
-      print('Error collecting location data: $e');
+      debugPrint('Error collecting location data: $e');
       return null;
     }
   }
@@ -268,7 +270,7 @@ class CaptureService {
       final events = await _calendarService.getTodayEvents();
       return events.map((e) => e.title ?? 'Untitled Event').toList();
     } catch (e) {
-      print('Error collecting calendar events: $e');
+      debugPrint('Error collecting calendar events: $e');
       return [];
     }
   }

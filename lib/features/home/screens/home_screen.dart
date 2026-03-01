@@ -70,47 +70,47 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         steps = await _healthService.getTodaySteps().timeout(
           const Duration(seconds: 5),
           onTimeout: () {
-            print('Health steps request timed out');
+            debugPrint('Health steps request timed out');
             return 0;
           },
         );
         calories = await _healthService.getTodayCalories().timeout(
           const Duration(seconds: 5),
           onTimeout: () {
-            print('Health calories request timed out');
+            debugPrint('Health calories request timed out');
             return 0;
           },
         );
         distance = await _healthService.getTodayDistance().timeout(
           const Duration(seconds: 5),
           onTimeout: () {
-            print('Health distance request timed out');
+            debugPrint('Health distance request timed out');
             return 0;
           },
         );
         sleep = await _healthService.getLastNightSleep().timeout(
           const Duration(seconds: 5),
           onTimeout: () {
-            print('Health sleep request timed out');
+            debugPrint('Health sleep request timed out');
             return 0;
           },
         );
         heartRate = await _healthService.getTodayAverageHeartRate().timeout(
           const Duration(seconds: 5),
           onTimeout: () {
-            print('Health heart rate request timed out');
+            debugPrint('Health heart rate request timed out');
             return 0;
           },
         );
         workouts = await _healthService.getTodayWorkoutCount().timeout(
           const Duration(seconds: 5),
           onTimeout: () {
-            print('Health workouts request timed out');
+            debugPrint('Health workouts request timed out');
             return 0;
           },
         );
       } catch (e) {
-        print('Error loading health data: $e');
+        debugPrint('Error loading health data: $e');
       }
 
       // Load location with timeout
@@ -119,12 +119,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         location = await _locationService.getCurrentLocation().timeout(
           const Duration(seconds: 5),
           onTimeout: () {
-            print('Location request timed out');
+            debugPrint('Location request timed out');
             return null;
           },
         );
       } catch (e) {
-        print('Error loading location: $e');
+        debugPrint('Error loading location: $e');
       }
 
       // Load calendar events with timeout
@@ -137,13 +137,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           events = await _calendarService.getTodayEvents().timeout(
             const Duration(seconds: 5),
             onTimeout: () {
-              print('Calendar events request timed out');
+              debugPrint('Calendar events request timed out');
               return <Event>[];
             },
           );
         }
       } catch (e) {
-        print('Error loading calendar events: $e');
+        debugPrint('Error loading calendar events: $e');
       }
 
       // Load ambient environmental data
@@ -155,13 +155,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               .timeout(
                 const Duration(seconds: 10),
                 onTimeout: () {
-                  print('Ambient scan request timed out');
+                  debugPrint('Ambient scan request timed out');
                   return null;
                 },
               );
         }
       } catch (e) {
-        print('Error loading ambient data: $e');
+        debugPrint('Error loading ambient data: $e');
       }
 
       // Load GPS metrics snapshot
@@ -170,12 +170,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         gpsMetrics = await _gpsMetricsService.getSnapshot().timeout(
           const Duration(seconds: 5),
           onTimeout: () {
-            print('GPS metrics request timed out');
+            debugPrint('GPS metrics request timed out');
             return GpsMetrics.empty();
           },
         );
       } catch (e) {
-        print('Error loading GPS metrics: $e');
+        debugPrint('Error loading GPS metrics: $e');
       }
 
       // Load DB info + context window
@@ -188,7 +188,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         final cwResult = await _contextWindowService.build(days: 7);
         contextWindowText = cwResult.text;
       } catch (e) {
-        print('Error loading DB / context window: $e');
+        debugPrint('Error loading DB / context window: $e');
       }
 
       if (mounted) {
@@ -211,7 +211,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         });
       }
     } catch (e) {
-      print('Error loading data: $e');
+      debugPrint('Error loading data: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -639,7 +639,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -719,7 +719,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     decoration: BoxDecoration(
                       color: Theme.of(
                         context,
-                      ).colorScheme.primary.withOpacity(0.1),
+                      ).colorScheme.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
@@ -1012,7 +1012,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(icon, color: color),

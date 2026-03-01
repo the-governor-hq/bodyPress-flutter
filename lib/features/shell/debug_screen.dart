@@ -1153,7 +1153,7 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
                           fontWeight: FontWeight.w700,
                           color: dark
                               ? Colors.white70
-                              : Colors.black.withOpacity(0.7),
+                              : Colors.black.withValues(alpha: 0.7),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -1170,7 +1170,7 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
                           size: 13,
                           color: dark
                               ? Colors.white30
-                              : Colors.black.withOpacity(0.3),
+                              : Colors.black.withValues(alpha: 0.3),
                         ),
                     ],
                   ),
@@ -1362,7 +1362,9 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
                     : 'AI service is not available',
                 style: TextStyle(
                   fontSize: 12,
-                  color: dark ? Colors.white70 : Colors.black.withOpacity(0.7),
+                  color: dark
+                      ? Colors.white70
+                      : Colors.black.withValues(alpha: 0.7),
                 ),
               ),
             ],
@@ -1503,7 +1505,9 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
               style: GoogleFonts.spaceMono(
                 fontSize: 10.5,
                 height: 1.6,
-                color: dark ? Colors.white70 : Colors.black.withOpacity(0.7),
+                color: dark
+                    ? Colors.white70
+                    : Colors.black.withValues(alpha: 0.7),
               ),
             ),
           ),
@@ -1635,7 +1639,7 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
                       size: 11,
                       color: dark
                           ? Colors.white30
-                          : Colors.black.withOpacity(0.3),
+                          : Colors.black.withValues(alpha: 0.3),
                     ),
                     const SizedBox(width: 4),
                     Expanded(
@@ -2049,7 +2053,9 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
                     : 'Daily notification is off',
                 style: TextStyle(
                   fontSize: 12,
-                  color: dark ? Colors.white70 : Colors.black.withOpacity(0.7),
+                  color: dark
+                      ? Colors.white70
+                      : Colors.black.withValues(alpha: 0.7),
                 ),
               ),
             ],
@@ -2417,8 +2423,9 @@ class _PermStatus {
   Color get statusColor {
     if (isGranted) return Colors.green;
     if (status == PermissionStatus.permanentlyDenied ||
-        status == PermissionStatus.restricted)
+        status == PermissionStatus.restricted) {
       return Colors.red;
+    }
     return Colors.orange;
   }
 }
