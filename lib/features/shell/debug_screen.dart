@@ -653,7 +653,7 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
                               dividerColor: dividerColor,
                               badge: _dbInfo == null
                                   ? null
-                                  : '${_dbInfo!.entryCount} rows',
+                                  : '${_dbInfo!.entryCount}j · ${_dbInfo!.captureCount}c',
                               errorText: _dbError,
                               child: _buildDbContent(dark),
                             ),
@@ -1095,7 +1095,8 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
             runSpacing: 8,
             children: [
               _dbKv('Schema', 'v${_dbInfo!.schemaVersion}', dark),
-              _dbKv('Entries', '${_dbInfo!.entryCount}', dark),
+              _dbKv('Journal', '${_dbInfo!.entryCount}', dark),
+              _dbKv('Captures', '${_dbInfo!.captureCount}', dark),
               _dbKv('Oldest', _dbInfo!.oldestDate ?? '—', dark),
               _dbKv('Newest', _dbInfo!.newestDate ?? '—', dark),
             ],

@@ -7,7 +7,7 @@ void main() {
   group('BackgroundCaptureConfig defaults', () {
     test('defaultConfig has expected values', () {
       const c = BackgroundCaptureConfig.defaultConfig;
-      expect(c.enabled, false);
+      expect(c.enabled, true);
       expect(c.interval, const Duration(minutes: 30));
       expect(c.includeHealth, true);
       expect(c.includeEnvironment, true);
@@ -78,9 +78,7 @@ void main() {
     });
 
     test('toJson stores interval as minutes', () {
-      const c = BackgroundCaptureConfig(
-        interval: Duration(hours: 4),
-      );
+      const c = BackgroundCaptureConfig(interval: Duration(hours: 4));
       expect(c.toJson()['interval_minutes'], 240);
     });
   });

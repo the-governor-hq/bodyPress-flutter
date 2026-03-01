@@ -76,6 +76,8 @@ class BodyBlogService {
 
     // ── cold start: no entry for today yet ──
     final snapshot = await _collectSnapshot();
+    // Persist a capture so the Capture & Patterns pages stay in sync.
+    await _createCaptureFromSnapshot(now, snapshot);
     var entry = _compose(now, snapshot);
     entry = await _applyAi(now, entry, snapshot);
     await _db.saveEntry(entry);
@@ -96,6 +98,8 @@ class BodyBlogService {
   Future<BodyBlogEntry> refreshTodayEntry() async {
     final now = DateTime.now();
     final snapshot = await _collectSnapshot();
+    // Persist a capture so the Capture & Patterns pages stay in sync.
+    await _createCaptureFromSnapshot(now, snapshot);
     var entry = _compose(now, snapshot);
 
     // Preserve existing user note & mood.
@@ -139,6 +143,8 @@ class BodyBlogService {
 
     if (isToday) {
       snapshot = await _collectSnapshot();
+      // Persist a capture so the Capture & Patterns pages stay in sync.
+      await _createCaptureFromSnapshot(today, snapshot);
       base = _compose(today, snapshot);
       final existing = await _db.loadEntry(today);
       if (existing != null) {
@@ -195,6 +201,50 @@ class BodyBlogService {
     String? mood,
   }) {
     return _db.updateUserNote(date, note, mood: mood);
+  }
+
+  // ── capture bridge ──────────────────────────────────────────────
+
+  /// Create and persist a [CaptureEntry] from a live [BodySnapshot].
+  ///
+  /// This keeps the captures table in sync with every journal generation
+  /// so the Capture page, Patterns page, and debug panel all see the data.
+  Future<void> _createCaptureFromSnapshot(
+    DateTime timestamp,
+    BodySnapshot s,
+  ) async {
+    final id = 'capture_${timestamp.millisecondsSinceEpoch}';
+    final capture = CaptureEntry(
+      id: id,
+      timestamp: timestamp,
+      healthData:
+          (s.steps > 0 ||
+              s.caloriesBurned > 0 ||
+              s.avgHeartRate > 0 ||
+              s.sleepHours > 0 ||
+              s.workouts > 0)
+          ? CaptureHealthData(
+              steps: s.steps > 0 ? s.steps : null,
+              calories: s.caloriesBurned > 0 ? s.caloriesBurned : null,
+              distance: s.distanceKm > 0 ? s.distanceKm * 1000 : null,
+              heartRate: s.avgHeartRate > 0 ? s.avgHeartRate : null,
+              sleepHours: s.sleepHours > 0 ? s.sleepHours : null,
+              workouts: s.workouts > 0 ? s.workouts : null,
+            )
+          : null,
+      environmentData: s.temperatureC != null
+          ? CaptureEnvironmentData(
+              temperature: s.temperatureC,
+              aqi: s.aqiUs,
+              uvIndex: s.uvIndex,
+              weatherDescription: s.weatherDesc,
+            )
+          : null,
+      calendarEvents: s.calendarEvents,
+      source: CaptureSource.manual,
+      trigger: CaptureTrigger.manual,
+    );
+    await _db.saveCapture(capture);
   }
 
   // ── AI enrichment ────────────────────────────────────────────────

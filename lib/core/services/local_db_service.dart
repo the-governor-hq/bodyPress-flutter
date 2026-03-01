@@ -9,6 +9,7 @@ class DbInfo {
   final String path;
   final int schemaVersion;
   final int entryCount;
+  final int captureCount;
   final String? oldestDate;
   final String? newestDate;
 
@@ -16,6 +17,7 @@ class DbInfo {
     required this.path,
     required this.schemaVersion,
     required this.entryCount,
+    this.captureCount = 0,
     this.oldestDate,
     this.newestDate,
   });
@@ -335,6 +337,12 @@ class LocalDbService {
             )).first['c']
             as int? ??
         0;
+    final captureCount =
+        (await db.rawQuery(
+              'SELECT COUNT(*) as c FROM $_tableCaptures',
+            )).first['c']
+            as int? ??
+        0;
     final oldest =
         (await db.query(
               _tableEntries,
@@ -354,6 +362,7 @@ class LocalDbService {
       path: dbPath,
       schemaVersion: _schemaVersion,
       entryCount: entryCount,
+      captureCount: captureCount,
       oldestDate: oldest,
       newestDate: newest,
     );
