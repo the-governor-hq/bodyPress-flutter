@@ -1,9 +1,11 @@
 import 'package:bodypress_flutter/core/models/ai_mode_config.dart';
 import 'package:bodypress_flutter/core/models/ai_models.dart';
+import 'package:bodypress_flutter/core/models/local_model_spec.dart';
 import 'package:bodypress_flutter/core/services/ai_router.dart';
 import 'package:bodypress_flutter/core/services/ai_service.dart';
 import 'package:bodypress_flutter/core/services/local_ai_service.dart';
-import 'package:flutter/services.dart';
+import 'package:bodypress_flutter/core/services/local_inference_engine.dart';
+import 'package:bodypress_flutter/core/services/stub_inference_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -35,17 +37,6 @@ class _FakeRemote extends AiService {
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
-
-  // Register a stub handler so the platform channel falls through to
-  // MissingPluginException, which LocalAiService handles gracefully.
-  setUp(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-          const MethodChannel('com.bodypress/local_llm'),
-          null, // null → throws MissingPluginException for every method
-        );
-  });
   group('AiModeConfig', () {
     test('defaults to remote mode', () {
       const cfg = AiModeConfig();
@@ -84,6 +75,257 @@ void main() {
     });
   });
 
+  group('LocalInferenceEngine contract (StubInferenceEngine)', () {
+    late StubInferenceEngine engine;
+
+    setUp(() {
+      engine = StubInferenceEngine(simulatedLatency: Duration.zero);
+    });
+
+    test('engine name is "stub"', () {
+      expect(engine.engineName, 'stub');
+    });
+
+    test('is always "available"', () async {
+      expect(await engine.isAvailable(), isTrue);
+    });
+
+    test('model not loaded initially', () {
+      expect(engine.isModelLoaded, isFalse);
+    });
+
+    test('loadModel transitions to loaded', () async {
+      await engine.loadModel('test-model');
+      expect(engine.isModelLoaded, isTrue);
+    });
+
+    test('unloadModel transitions to not loaded', () async {
+      await engine.loadModel('test-model');
+      await engine.unloadModel();
+      expect(engine.isModelLoaded, isFalse);
+    });
+
+    test('infer throws when model not loaded', () {
+      expect(
+        () => engine.infer([ChatMessage.user('Hello')]),
+        throwsA(isA<AiServiceException>()),
+      );
+    });
+
+    test('infer returns InferenceResult with metadata', () async {
+      await engine.loadModel('test-model');
+      final result = await engine.infer([ChatMessage.user('Hello')]);
+      expect(result.text, isNotEmpty);
+      expect(result.engineName, 'stub');
+      expect(result.latency, greaterThanOrEqualTo(Duration.zero));
+      expect(result.promptTokens, greaterThan(0));
+      expect(result.completionTokens, greaterThan(0));
+    });
+
+    test('infer returns valid journal JSON for journal prompt', () async {
+      await engine.loadModel('test-model');
+      final result = await engine.infer([
+        ChatMessage.user('Generate journal.\n"headline": "..."'),
+      ]);
+      expect(result.text, contains('"headline"'));
+    });
+
+    test('infer returns valid metadata JSON for metadata prompt', () async {
+      await engine.loadModel('test-model');
+      final result = await engine.infer([
+        ChatMessage.user(
+          'Analyse capture.\n"themes": ["..."]\n"energy_level": "..."',
+        ),
+      ]);
+      expect(result.text, contains('"themes"'));
+    });
+  });
+
+  group('InferenceResult', () {
+    test('tokensPerSecond computation', () {
+      const result = InferenceResult(
+        text: 'hello world',
+        latency: Duration(seconds: 1),
+        promptTokens: 10,
+        completionTokens: 100,
+        engineName: 'test',
+      );
+      expect(result.tokensPerSecond, closeTo(100.0, 0.1));
+    });
+
+    test('tokensPerSecond is 0 for zero latency', () {
+      const result = InferenceResult(
+        text: 'hello',
+        latency: Duration.zero,
+        promptTokens: 0,
+        completionTokens: 0,
+        engineName: 'test',
+      );
+      expect(result.tokensPerSecond, 0.0);
+    });
+  });
+
+  group('LocalModelSpec / Registry', () {
+    test('registry contains at least one model', () {
+      expect(LocalModelRegistry.all, isNotEmpty);
+    });
+
+    test('default model is in the registry', () {
+      expect(
+        LocalModelRegistry.all.contains(LocalModelRegistry.defaultModel),
+        isTrue,
+      );
+    });
+
+    test('byId finds known model', () {
+      final model = LocalModelRegistry.byId('gemma-2b-it-q4_0');
+      expect(model, isNotNull);
+      expect(model!.family, 'gemma');
+    });
+
+    test('byId returns null for unknown model', () {
+      expect(LocalModelRegistry.byId('nonexistent'), isNull);
+    });
+
+    test('fileSizeDisplay formats correctly', () {
+      expect(LocalModelRegistry.gemma2b_q4.fileSizeDisplay, contains('GB'));
+      expect(LocalModelRegistry.smolLM2_360m.fileSizeDisplay, contains('MB'));
+    });
+
+    test('models ordered smallest first', () {
+      for (int i = 1; i < LocalModelRegistry.all.length; i++) {
+        expect(
+          LocalModelRegistry.all[i].fileSizeBytes,
+          greaterThanOrEqualTo(LocalModelRegistry.all[i - 1].fileSizeBytes),
+        );
+      }
+    });
+  });
+
+  group('LocalAiService (with stub engine)', () {
+    late LocalAiService local;
+
+    setUp(() {
+      local = LocalAiService.stub();
+    });
+
+    test('initial status is notDownloaded', () {
+      expect(local.status, LocalModelStatus.notDownloaded);
+      expect(local.modelName, isNull);
+      expect(local.engineName, 'stub');
+    });
+
+    test('resolveBackend detects stub as available', () async {
+      final backend = await local.resolveBackend();
+      expect(backend, LocalModelBackend.bundledRuntime);
+    });
+
+    test('download transitions to downloaded with progress', () async {
+      final progressValues = <double>[];
+      final status = await local.downloadModel(onProgress: progressValues.add);
+      expect(status, LocalModelStatus.downloaded);
+      expect(local.modelName, isNotNull);
+      expect(progressValues, contains(1.0));
+      expect(progressValues.first, lessThanOrEqualTo(progressValues.last));
+    });
+
+    test('download uses specified model spec', () async {
+      await local.downloadModel(spec: LocalModelRegistry.gemma2b_q4);
+      expect(local.modelName, 'gemma-2b-it-q4_0');
+      expect(local.modelSpec, isNotNull);
+      expect(local.modelSpec!.family, 'gemma');
+    });
+
+    test('download defaults to registry default model', () async {
+      await local.downloadModel();
+      expect(local.modelName, LocalModelRegistry.defaultModel.id);
+    });
+
+    test('activate transitions to ready', () async {
+      await local.downloadModel();
+      final status = await local.activateModel();
+      expect(status, LocalModelStatus.ready);
+    });
+
+    test('activate fails when not downloaded', () async {
+      final status = await local.activateModel();
+      expect(status, LocalModelStatus.notDownloaded);
+      expect(local.lastError, isNotNull);
+    });
+
+    test('ask works when model is ready', () async {
+      await local.downloadModel();
+      await local.activateModel();
+      final response = await local.ask('Hello fitness!');
+      expect(response, isNotEmpty);
+    });
+
+    test('ask throws when model not ready', () {
+      expect(() => local.ask('Hello'), throwsA(isA<AiServiceException>()));
+    });
+
+    test('chatCompletion returns usage stats', () async {
+      await local.downloadModel();
+      await local.activateModel();
+      final response = await local.chatCompletion([ChatMessage.user('Hello!')]);
+      expect(response.usage, isNotNull);
+      expect(response.usage!.totalTokens, greaterThan(0));
+      expect(response.model, contains(local.modelName!));
+    });
+
+    test('deactivate goes back to downloaded', () async {
+      await local.downloadModel();
+      await local.activateModel();
+      await local.deactivateModel();
+      expect(local.status, LocalModelStatus.downloaded);
+    });
+
+    test('delete resets everything', () async {
+      await local.downloadModel();
+      await local.activateModel();
+      await local.deleteModel();
+      expect(local.status, LocalModelStatus.notDownloaded);
+      expect(local.modelName, isNull);
+      expect(local.modelSpec, isNull);
+    });
+
+    test('checkHealth reflects model readiness', () async {
+      expect(await local.checkHealth(), isFalse);
+      await local.downloadModel();
+      expect(await local.checkHealth(), isFalse);
+      await local.activateModel();
+      expect(await local.checkHealth(), isTrue);
+    });
+
+    test('toConfig returns correct snapshot', () async {
+      await local.downloadModel();
+      await local.activateModel();
+      final cfg = local.toConfig(AiMode.local);
+      expect(cfg.mode, AiMode.local);
+      expect(cfg.modelStatus, LocalModelStatus.ready);
+      expect(cfg.modelName, isNotNull);
+    });
+
+    test('stub returns valid JSON for journal prompt', () async {
+      await local.downloadModel();
+      await local.activateModel();
+      final response = await local.ask(
+        'Generate journal for today.\n"headline": "..."',
+        systemPrompt: 'You are a journal writer.',
+      );
+      expect(response, contains('headline'));
+    });
+
+    test('stub returns valid JSON for metadata prompt', () async {
+      await local.downloadModel();
+      await local.activateModel();
+      final response = await local.ask(
+        'Analyse this capture.\n"themes": ["..."]\n"energy_level": "..."',
+      );
+      expect(response, contains('themes'));
+    });
+  });
+
   group('AiRouter', () {
     late _FakeRemote fakeRemote;
     late LocalAiService localService;
@@ -91,7 +333,7 @@ void main() {
 
     setUp(() {
       fakeRemote = _FakeRemote();
-      localService = LocalAiService();
+      localService = LocalAiService.stub();
       router = AiRouter(remote: fakeRemote, local: localService);
     });
 
@@ -106,15 +348,14 @@ void main() {
       expect(fakeRemote.askCount, 1);
     });
 
-    test('routes ask() to local in local mode (stub)', () async {
-      // Activate local stub model first.
+    test('routes ask() to local in local mode', () async {
       await localService.downloadModel();
       await localService.activateModel();
       router.mode = AiMode.local;
 
       final result = await router.ask('Hello');
       expect(result, isNotEmpty);
-      expect(fakeRemote.askCount, 0, reason: 'remote should NOT be called');
+      expect(fakeRemote.askCount, 0, reason: 'remote must NOT be called');
     });
 
     test('local mode throws when model not ready (hard fail)', () async {
@@ -132,7 +373,7 @@ void main() {
       await router.ask('test1');
       expect(fakeRemote.askCount, 1);
 
-      // Switch to local (with stub model).
+      // Switch to local.
       await localService.downloadModel();
       await localService.activateModel();
       router.mode = AiMode.local;
@@ -162,106 +403,6 @@ void main() {
       await localService.downloadModel();
       await localService.activateModel();
       expect(await router.checkHealth(), isTrue);
-    });
-  });
-
-  group('LocalAiService', () {
-    late LocalAiService local;
-
-    setUp(() {
-      local = LocalAiService();
-    });
-
-    test('initial status is notDownloaded', () {
-      expect(local.status, LocalModelStatus.notDownloaded);
-      expect(local.modelName, isNull);
-    });
-
-    test('download transitions to downloaded (stub)', () async {
-      final progressValues = <double>[];
-      final status = await local.downloadModel(onProgress: progressValues.add);
-      expect(status, LocalModelStatus.downloaded);
-      expect(local.modelName, isNotNull);
-      expect(progressValues, contains(1.0));
-    });
-
-    test('activate transitions to ready', () async {
-      await local.downloadModel();
-      final status = await local.activateModel();
-      expect(status, LocalModelStatus.ready);
-    });
-
-    test('activate fails when not downloaded', () async {
-      final status = await local.activateModel();
-      expect(status, LocalModelStatus.notDownloaded);
-      expect(local.lastError, isNotNull);
-    });
-
-    test('ask works when model is ready (stub)', () async {
-      await local.downloadModel();
-      await local.activateModel();
-
-      final response = await local.ask('Hello fitness!');
-      expect(response, isNotEmpty);
-    });
-
-    test('ask throws when model not ready', () async {
-      expect(() => local.ask('Hello'), throwsA(isA<AiServiceException>()));
-    });
-
-    test('deactivate goes back to downloaded', () async {
-      await local.downloadModel();
-      await local.activateModel();
-      await local.deactivateModel();
-      expect(local.status, LocalModelStatus.downloaded);
-    });
-
-    test('delete resets everything', () async {
-      await local.downloadModel();
-      await local.activateModel();
-      await local.deleteModel();
-      expect(local.status, LocalModelStatus.notDownloaded);
-      expect(local.modelName, isNull);
-    });
-
-    test('checkHealth reflects model readiness', () async {
-      expect(await local.checkHealth(), isFalse);
-      await local.downloadModel();
-      expect(await local.checkHealth(), isFalse);
-      await local.activateModel();
-      expect(await local.checkHealth(), isTrue);
-    });
-
-    test('toConfig returns correct snapshot', () async {
-      await local.downloadModel();
-      await local.activateModel();
-      final cfg = local.toConfig(AiMode.local);
-
-      expect(cfg.mode, AiMode.local);
-      expect(cfg.modelStatus, LocalModelStatus.ready);
-      expect(cfg.modelName, isNotNull);
-    });
-
-    test('stub response returns valid JSON for journal prompt', () async {
-      await local.downloadModel();
-      await local.activateModel();
-
-      final response = await local.ask(
-        'Generate journal for today.\n"headline": "..."',
-        systemPrompt: 'You are a journal writer.',
-      );
-      // Should contain JSON-like content.
-      expect(response, contains('headline'));
-    });
-
-    test('stub response returns valid JSON for metadata prompt', () async {
-      await local.downloadModel();
-      await local.activateModel();
-
-      final response = await local.ask(
-        'Analyse this capture.\n"themes": ["..."]\n"energy_level": "..."',
-      );
-      expect(response, contains('themes'));
     });
   });
 }

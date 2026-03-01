@@ -17,9 +17,7 @@ class _FakeAiService extends AiService {
   final bool shouldThrow;
 
   _FakeAiService({this.response, this.shouldThrow = false})
-      : super(
-          client: MockClient((_) async => http.Response('', 500)),
-        );
+    : super(client: MockClient((_) async => http.Response('', 500)));
 
   @override
   Future<String> ask(
@@ -37,7 +35,7 @@ class _FakeAiService extends AiService {
 
 /// Wrap a fake [AiService] in an [AiRouter] for test injection.
 AiRouter _fakeRouter(AiService fake) =>
-    AiRouter(remote: fake, local: LocalAiService());
+    AiRouter(remote: fake, local: LocalAiService.stub());
 
 void main() {
   // ─── JournalAiResult.fromJson ─────────────────────────────────────────────
@@ -276,12 +274,8 @@ class _CapturingAiService extends AiService {
   final String aiResponse;
   final void Function(String) onPrompt;
 
-  _CapturingAiService({
-    required this.aiResponse,
-    required this.onPrompt,
-  }) : super(
-          client: MockClient((_) async => http.Response('', 500)),
-        );
+  _CapturingAiService({required this.aiResponse, required this.onPrompt})
+    : super(client: MockClient((_) async => http.Response('', 500)));
 
   @override
   Future<String> ask(
