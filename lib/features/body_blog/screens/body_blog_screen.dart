@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -950,6 +952,7 @@ class _ZenLoaderState extends State<_ZenLoader>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
   late final Stopwatch _stopwatch;
+  Timer? _timer;
   int _phraseIndex = 0;
   int _elapsedSeconds = 0;
 
@@ -962,21 +965,20 @@ class _ZenLoaderState extends State<_ZenLoader>
     )..repeat(reverse: true);
     _stopwatch = Stopwatch()..start();
     // Rotate phrase every 4 seconds and update elapsed time every second
-    Future.doWhile(() async {
-      await Future.delayed(const Duration(seconds: 1));
-      if (!mounted) return false;
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
       setState(() {
         _elapsedSeconds = _stopwatch.elapsed.inSeconds;
         if (_elapsedSeconds > 0 && _elapsedSeconds % 4 == 0) {
           _phraseIndex = (_phraseIndex + 1) % _zenPhrases.length;
         }
       });
-      return mounted;
     });
   }
 
   @override
   void dispose() {
+    _timer?.cancel();
     _ctrl.dispose();
     _stopwatch.stop();
     super.dispose();
