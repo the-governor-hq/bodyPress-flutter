@@ -31,20 +31,25 @@ void main() async {
   final db = container.read(localDbServiceProvider);
   final skipOnboarding = (await db.getSetting('skip_onboarding')) == 'true';
 
-  // Re-schedule daily reminder if the user previously enabled it.
+  // Schedule daily reminder — default to 9:00 AM if never configured.
   final dailyReminderTime = await db.getSetting('daily_reminder_time');
+  final int reminderHour;
+  final int reminderMinute;
   if (dailyReminderTime != null && dailyReminderTime.isNotEmpty) {
     final parts = dailyReminderTime.split(':');
-    if (parts.length == 2) {
-      final hour = int.tryParse(parts[0]);
-      final minute = int.tryParse(parts[1]);
-      if (hour != null && minute != null) {
-        final notifService = container.read(notificationServiceProvider);
-        await notifService.initialize();
-        await notifService.scheduleDailyReminder(hour: hour, minute: minute);
-      }
-    }
+    reminderHour = (parts.length == 2 ? int.tryParse(parts[0]) : null) ?? 9;
+    reminderMinute = (parts.length == 2 ? int.tryParse(parts[1]) : null) ?? 0;
+  } else {
+    reminderHour = 9;
+    reminderMinute = 0;
+    await db.setSetting('daily_reminder_time', '9:0');
   }
+  final notifService = container.read(notificationServiceProvider);
+  await notifService.initialize();
+  await notifService.scheduleDailyReminder(
+    hour: reminderHour,
+    minute: reminderMinute,
+  );
 
   AppRouter.init(skipOnboarding: skipOnboarding);
 

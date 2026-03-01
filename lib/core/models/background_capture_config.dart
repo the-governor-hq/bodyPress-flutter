@@ -41,7 +41,7 @@ class BackgroundCaptureConfig {
   final bool notificationsEnabled;
 
   const BackgroundCaptureConfig({
-    this.enabled = false,
+    this.enabled = true,
     this.interval = const Duration(minutes: 30),
     this.includeHealth = true,
     this.includeEnvironment = true,
@@ -55,7 +55,7 @@ class BackgroundCaptureConfig {
     this.notificationsEnabled = true,
   });
 
-  /// Default configuration — background captures disabled.
+  /// Default configuration — background captures enabled.
   static const BackgroundCaptureConfig defaultConfig =
       BackgroundCaptureConfig();
 
