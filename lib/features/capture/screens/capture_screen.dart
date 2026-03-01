@@ -1211,7 +1211,7 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
         if (data.calories != null)
           ('Calories', '${data.calories?.toStringAsFixed(0)} kcal'),
         if (data.distance != null)
-          ('Distance', '${data.distance?.toStringAsFixed(2)} km'),
+          ('Distance', '${data.distance!.toStringAsFixed(0)} m'),
         if (data.heartRate != null) ('Heart Rate', '${data.heartRate} bpm'),
         if (data.sleepHours != null)
           ('Sleep', '${data.sleepHours?.toStringAsFixed(1)} hours'),

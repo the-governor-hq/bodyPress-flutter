@@ -133,7 +133,7 @@ class CaptureMetadataService {
       }
       if (h.workouts != null) buf.writeln('  workouts=${h.workouts}');
       if (h.distance != null) {
-        buf.writeln('  distance=${h.distance!.toStringAsFixed(2)} km');
+        buf.writeln('  distance=${h.distance!.toStringAsFixed(0)} m');
       }
     }
 
