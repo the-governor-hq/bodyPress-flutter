@@ -21,8 +21,11 @@ class CaptureScreen extends ConsumerStatefulWidget {
 class _CaptureScreenState extends ConsumerState<CaptureScreen>
     with TickerProviderStateMixin {
   late final _captureService = ref.read(captureServiceProvider);
+  late final _metadataService = ref.read(captureMetadataServiceProvider);
   final TextEditingController _noteController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+
+  bool _isProcessing = false;
 
   bool _includeHealth = true;
   bool _includeEnvironment = true;
@@ -97,6 +100,104 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
       }
     } catch (e) {
       debugPrint('Error loading recent captures: $e');
+    }
+  }
+
+  /// Process a single unprocessed capture via the AI metadata service.
+  Future<void> _processCapture(String captureId, {VoidCallback? onDone}) async {
+    if (_isProcessing) return;
+    HapticFeedback.lightImpact();
+    setState(() => _isProcessing = true);
+    try {
+      await _metadataService.processCapture(captureId);
+      await _loadRecentCaptures();
+      if (mounted) {
+        // Check whether it actually got processed (service swallows errors).
+        final updated = _recentCaptures
+            ?.where((c) => c.id == captureId)
+            .firstOrNull;
+        final succeeded = updated?.aiMetadata != null;
+        HapticFeedback.mediumImpact();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              succeeded
+                  ? 'Capture processed successfully'
+                  : 'Processing failed — check your AI service key',
+            ),
+            backgroundColor: succeeded
+                ? Colors.green.shade600
+                : Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+        if (succeeded) onDone?.call();
+      }
+    } catch (e) {
+      debugPrint('Error processing capture: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Processing error: $e'),
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  /// Process all pending captures in sequence.
+  Future<void> _processAllPending() async {
+    if (_isProcessing) return;
+    HapticFeedback.lightImpact();
+    setState(() => _isProcessing = true);
+    try {
+      final processed = await _metadataService.processAllPendingMetadata();
+      await _loadRecentCaptures();
+      if (mounted) {
+        HapticFeedback.mediumImpact();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              processed > 0
+                  ? '$processed capture${processed == 1 ? '' : 's'} processed'
+                  : 'No captures could be processed — check AI service',
+            ),
+            backgroundColor: processed > 0
+                ? Colors.green.shade600
+                : Colors.amber.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error processing pending captures: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Processing error: $e'),
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
@@ -754,6 +855,42 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
             color: theme.colorScheme.primary.withValues(alpha: 0.12),
           ),
         ),
+        if (_unprocessedCount > 0) ...[
+          const SizedBox(width: 10),
+          GestureDetector(
+            onTap: _isProcessing ? null : _processAllPending,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_isProcessing)
+                  SizedBox(
+                    width: 10,
+                    height: 10,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.5,
+                      color: Colors.amber.shade600,
+                    ),
+                  )
+                else
+                  Icon(
+                    Icons.play_arrow_rounded,
+                    size: 14,
+                    color: Colors.amber.shade600,
+                  ),
+                const SizedBox(width: 4),
+                Text(
+                  _isProcessing ? 'PROCESSING…' : 'PROCESS ALL',
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.0,
+                    color: Colors.amber.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -1096,6 +1233,56 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
                             ? Colors.green.shade400
                             : Colors.amber.shade600,
                       ),
+                      if (!capture.isProcessed)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 20),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: _isProcessing
+                                  ? null
+                                  : () => _processCapture(
+                                      capture.id,
+                                      onDone: () => Navigator.pop(context),
+                                    ),
+                              icon: _isProcessing
+                                  ? SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.amber.shade600,
+                                      ),
+                                    )
+                                  : Icon(
+                                      Icons.psychology_rounded,
+                                      size: 18,
+                                      color: Colors.amber.shade600,
+                                    ),
+                              label: Text(
+                                _isProcessing ? 'Processing…' : 'Process Now',
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.amber.shade600,
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(
+                                  color: Colors.amber.shade600.withValues(
+                                    alpha: 0.4,
+                                  ),
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       if (capture.userMood != null)
                         _buildDetailSection(
                           theme,
