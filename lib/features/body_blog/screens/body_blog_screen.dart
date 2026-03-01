@@ -469,7 +469,7 @@ class _BlogPage extends StatelessWidget {
                           ),
                           const SizedBox(width: 10),
                           Text(
-                            'Refreshing with AI…',
+                            'Gathering your story…',
                             style: GoogleFonts.inter(
                               fontSize: 13,
                               fontWeight: FontWeight.w400,
@@ -886,7 +886,7 @@ class _TodayPill extends StatelessWidget {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-//  AI BADGE — small "✦ AI" chip on AI-generated entries
+//  GENERATED BADGE — small "✦ Generated" chip on generated entries
 // ═════════════════════════════════════════════════════════════════════════════
 
 class _AiBadge extends StatelessWidget {
@@ -912,7 +912,7 @@ class _AiBadge extends StatelessWidget {
           Icon(Icons.auto_awesome_rounded, size: 10, color: primary),
           const SizedBox(width: 3),
           Text(
-            'AI',
+            'Generated',
             style: GoogleFonts.inter(
               fontSize: 10,
               fontWeight: FontWeight.w700,
@@ -927,8 +927,17 @@ class _AiBadge extends StatelessWidget {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-//  ZEN LOADER
+//  ZEN LOADER — engaging rotating phrases with elapsed time
 // ═════════════════════════════════════════════════════════════════════════════
+
+const _zenPhrases = [
+  'Sensing your rhythm…',
+  'Reading between the heartbeats…',
+  'Composing your story…',
+  'Weaving your day together…',
+  'Finding the thread…',
+  'Listening to your body…',
+];
 
 class _ZenLoader extends StatefulWidget {
   const _ZenLoader();
@@ -940,6 +949,9 @@ class _ZenLoader extends StatefulWidget {
 class _ZenLoaderState extends State<_ZenLoader>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
+  late final Stopwatch _stopwatch;
+  int _phraseIndex = 0;
+  int _elapsedSeconds = 0;
 
   @override
   void initState() {
@@ -948,18 +960,41 @@ class _ZenLoaderState extends State<_ZenLoader>
       vsync: this,
       duration: const Duration(seconds: 3),
     )..repeat(reverse: true);
+    _stopwatch = Stopwatch()..start();
+    // Rotate phrase every 4 seconds and update elapsed time every second
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(seconds: 1));
+      if (!mounted) return false;
+      setState(() {
+        _elapsedSeconds = _stopwatch.elapsed.inSeconds;
+        if (_elapsedSeconds > 0 && _elapsedSeconds % 4 == 0) {
+          _phraseIndex = (_phraseIndex + 1) % _zenPhrases.length;
+        }
+      });
+      return mounted;
+    });
   }
 
   @override
   void dispose() {
     _ctrl.dispose();
+    _stopwatch.stop();
     super.dispose();
+  }
+
+  String _formatElapsed(int seconds) {
+    if (seconds < 5) return '';
+    if (seconds < 60) return '${seconds}s';
+    final mins = seconds ~/ 60;
+    final secs = seconds % 60;
+    return '${mins}m ${secs}s';
   }
 
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).colorScheme.primary;
+    final elapsed = _formatElapsed(_elapsedSeconds);
     return AnimatedBuilder(
       animation: _ctrl,
       builder: (context, _) {
@@ -974,14 +1009,29 @@ class _ZenLoaderState extends State<_ZenLoader>
               ),
             ),
             const SizedBox(height: 16),
-            Text(
-              'Writing your journal with AI…',
-              style: GoogleFonts.inter(
-                fontSize: 14,
-                fontWeight: FontWeight.w300,
-                color: dark ? Colors.white38 : Colors.black38,
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 400),
+              child: Text(
+                _zenPhrases[_phraseIndex],
+                key: ValueKey<int>(_phraseIndex),
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w300,
+                  color: dark ? Colors.white38 : Colors.black38,
+                ),
               ),
             ),
+            if (elapsed.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                elapsed,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: dark ? Colors.white24 : Colors.black26,
+                ),
+              ),
+            ],
           ],
         );
       },
@@ -1315,8 +1365,8 @@ class _BlogDetailPageState extends ConsumerState<_BlogDetailPage> {
                         )
                       : Tooltip(
                           message: _entry.aiGenerated
-                              ? 'Regenerate with AI'
-                              : 'Write with AI',
+                              ? 'Rewrite entry'
+                              : 'Generate entry',
                           child: IconButton(
                             onPressed: _regenerateWithAi,
                             icon: Icon(
@@ -1379,7 +1429,7 @@ class _BlogDetailPageState extends ConsumerState<_BlogDetailPage> {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            'AI writing…',
+                            'Writing…',
                             style: GoogleFonts.inter(
                               fontSize: 11,
                               color: primary.withValues(alpha: 0.6),
