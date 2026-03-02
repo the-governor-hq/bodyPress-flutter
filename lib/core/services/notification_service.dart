@@ -6,9 +6,7 @@ import 'package:timezone/timezone.dart' as tz;
 /// Thin wrapper around `flutter_local_notifications` scoped to the channels
 /// BodyPress needs.
 ///
-/// Two channels:
-/// - **Background Captures** — used by the [CaptureExecutor] to surface
-///   results to the user.
+/// One channel:
 /// - **Daily Body Blog** — a once-per-day mindful reminder styled as a
 ///   "new post from your body".
 class NotificationService {

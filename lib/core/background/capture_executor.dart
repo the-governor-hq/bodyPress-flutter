@@ -105,13 +105,3 @@ Future<void> _incrementCounter(LocalDbService db, String key) async {
   final current = int.tryParse(raw ?? '') ?? 0;
   await db.setSetting(key, '${current + 1}');
 }
-
-/// Human-readable summary of which data sources were included.
-String _describeSources(BackgroundCaptureConfig config) {
-  final parts = <String>[];
-  if (config.includeHealth) parts.add('health');
-  if (config.includeEnvironment) parts.add('environment');
-  if (config.includeLocation) parts.add('location');
-  if (config.includeCalendar) parts.add('calendar');
-  return parts.join(', ');
-}
