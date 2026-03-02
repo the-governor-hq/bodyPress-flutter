@@ -13,6 +13,28 @@ final _allCapturesProvider = FutureProvider.autoDispose<List<CaptureEntry>>(
   (ref) => ref.read(captureServiceProvider).getCaptures(),
 );
 
+// ── Interval selector ────────────────────────────────────────────────────────
+
+enum _PatternInterval {
+  week('7 days', 7),
+  month('30 days', 30),
+  quarter('90 days', 90),
+  all('All', 0);
+
+  const _PatternInterval(this.label, this.days);
+  final String label;
+  final int days;
+}
+
+List<CaptureEntry> _filterByInterval(
+  List<CaptureEntry> captures,
+  _PatternInterval interval,
+) {
+  if (interval == _PatternInterval.all) return captures;
+  final cutoff = DateTime.now().subtract(Duration(days: interval.days));
+  return captures.where((c) => c.timestamp.isAfter(cutoff)).toList();
+}
+
 // ── Aggregated patterns ─────────────────────────────────────────────────────
 
 class _PatternSummary {
@@ -120,6 +142,9 @@ class PatternsScreen extends ConsumerStatefulWidget {
 }
 
 class _PatternsScreenState extends ConsumerState<PatternsScreen> {
+  // ── Interval filter ─────────────────────────────────────────────────────
+  _PatternInterval _interval = _PatternInterval.all;
+
   // ── Analysis progress ───────────────────────────────────────────────────
   int _analyzingDone = 0;
   int _analyzingTotal = 0; // 0 = idle (not started), >0 = in progress or done
@@ -177,15 +202,19 @@ class _PatternsScreenState extends ConsumerState<PatternsScreen> {
             if (captures.isEmpty) {
               return _EmptyState(theme: theme);
             }
-            final summary = _buildSummary(captures);
+            final filtered = _filterByInterval(captures, _interval);
+            final summary = _buildSummary(filtered);
             return _PatternBody(
               summary: summary,
+              totalCaptures: captures.length,
               theme: theme,
               dark: dark,
               isAnalyzing: _isAnalyzing,
               analyzingDone: _analyzingDone,
               analyzingTotal: _analyzingTotal,
               justFinished: _justFinished,
+              selectedInterval: _interval,
+              onIntervalChanged: (v) => setState(() => _interval = v),
             );
           },
         ),
@@ -198,34 +227,53 @@ class _PatternsScreenState extends ConsumerState<PatternsScreen> {
 
 class _PatternBody extends StatelessWidget {
   final _PatternSummary summary;
+  final int totalCaptures;
   final ThemeData theme;
   final bool dark;
   final bool isAnalyzing;
   final int analyzingDone;
   final int analyzingTotal;
   final bool justFinished;
+  final _PatternInterval selectedInterval;
+  final ValueChanged<_PatternInterval> onIntervalChanged;
 
   const _PatternBody({
     required this.summary,
+    required this.totalCaptures,
     required this.theme,
     required this.dark,
     required this.isAnalyzing,
     required this.analyzingDone,
     required this.analyzingTotal,
     required this.justFinished,
+    required this.selectedInterval,
+    required this.onIntervalChanged,
   });
 
   @override
   Widget build(BuildContext context) {
     final showBanner = isAnalyzing || justFinished;
 
+    final intervalSuffix = selectedInterval == _PatternInterval.all
+        ? ''
+        : ' (${selectedInterval.label})';
+
     return Column(
       children: [
         AppHeader(
           title: 'Patterns',
           subtitle:
-              '${summary.analyzedCaptures} of ${summary.totalCaptures} captures analysed',
+              '${summary.analyzedCaptures} of $totalCaptures analysed$intervalSuffix',
         ),
+
+        // ── Interval picker ──────────────────────────────────────────
+        _IntervalPicker(
+          selected: selectedInterval,
+          onChanged: onIntervalChanged,
+          theme: theme,
+          dark: dark,
+        ),
+
         Expanded(
           child: RefreshIndicator(
             onRefresh: () async {
@@ -483,6 +531,69 @@ class _AnalysisBanner extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Interval picker widget ───────────────────────────────────────────────────
+
+class _IntervalPicker extends StatelessWidget {
+  final _PatternInterval selected;
+  final ValueChanged<_PatternInterval> onChanged;
+  final ThemeData theme;
+  final bool dark;
+
+  const _IntervalPicker({
+    required this.selected,
+    required this.onChanged,
+    required this.theme,
+    required this.dark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+      child: Row(
+        children: _PatternInterval.values.map((interval) {
+          final isSelected = interval == selected;
+          final accent = theme.colorScheme.primary;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: GestureDetector(
+              onTap: () => onChanged(interval),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? accent.withValues(alpha: 0.12)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isSelected
+                        ? accent.withValues(alpha: 0.35)
+                        : theme.colorScheme.outline.withValues(alpha: 0.12),
+                  ),
+                ),
+                child: Text(
+                  interval.label,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                    color: isSelected
+                        ? accent
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
