@@ -831,58 +831,95 @@ class _DateNav extends StatelessWidget {
     final hasNewer = current > 0;
     final hasOlder = current < entries.length - 1;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
-      child: Row(
-        children: [
-          // ── Left arrow: show target date ─────────────────
-          Expanded(
-            child: _DateArrow(
-              enabled: hasNewer,
-              onTap: onPrev,
-              label: hasNewer ? _shortDate(entries[current - 1].date) : '',
-              icon: Icons.chevron_left_rounded,
-              alignment: Alignment.centerLeft,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // ── Stylish separator: faint gradient rule + subtle glow ──────────
+        Container(
+          height: 1,
+          margin: const EdgeInsets.symmetric(horizontal: 0),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Colors.transparent,
+                primary.withValues(alpha: dark ? 0.35 : 0.25),
+                primary.withValues(alpha: dark ? 0.55 : 0.40),
+                primary.withValues(alpha: dark ? 0.35 : 0.25),
+                Colors.transparent,
+              ],
             ),
           ),
-
-          // ── Center: current date with relative label ────
-          Column(
-            mainAxisSize: MainAxisSize.min,
+        ),
+        const SizedBox(height: 1),
+        // ── Soft glow blur beneath the line ───────────────────────────────
+        Container(
+          height: 6,
+          margin: const EdgeInsets.symmetric(horizontal: 32),
+          decoration: BoxDecoration(
+            gradient: RadialGradient(
+              center: Alignment.topCenter,
+              radius: 1.0,
+              colors: [
+                primary.withValues(alpha: dark ? 0.12 : 0.08),
+                Colors.transparent,
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 2, 12, 16),
+          child: Row(
             children: [
-              Text(
-                _relativeLabel(entries[current].date),
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.2,
-                  color: primary,
+              // ── Left arrow: show target date ─────────────────
+              Expanded(
+                child: _DateArrow(
+                  enabled: hasNewer,
+                  onTap: onPrev,
+                  label: hasNewer ? _shortDate(entries[current - 1].date) : '',
+                  icon: Icons.chevron_left_rounded,
+                  alignment: Alignment.centerLeft,
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                DateFormat('MMM d, y').format(entries[current].date),
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w400,
-                  color: dark ? Colors.white54 : Colors.black45,
+
+              // ── Center: current date with relative label ────
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _relativeLabel(entries[current].date),
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.2,
+                      color: primary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    DateFormat('MMM d, y').format(entries[current].date),
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w400,
+                      color: dark ? Colors.white54 : Colors.black45,
+                    ),
+                  ),
+                ],
+              ),
+
+              // ── Right arrow: show target date ────────────────
+              Expanded(
+                child: _DateArrow(
+                  enabled: hasOlder,
+                  onTap: onNext,
+                  label: hasOlder ? _shortDate(entries[current + 1].date) : '',
+                  icon: Icons.chevron_right_rounded,
+                  alignment: Alignment.centerRight,
                 ),
               ),
             ],
           ),
-
-          // ── Right arrow: show target date ────────────────
-          Expanded(
-            child: _DateArrow(
-              enabled: hasOlder,
-              onTap: onNext,
-              label: hasOlder ? _shortDate(entries[current + 1].date) : '',
-              icon: Icons.chevron_right_rounded,
-              alignment: Alignment.centerRight,
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
