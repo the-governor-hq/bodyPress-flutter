@@ -702,6 +702,18 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
           _sensorChip(
             theme,
             dark,
+            Icons.bluetooth_rounded,
+            _bleState == BleConnectionState.streaming
+                ? '${_liveHr ?? '--'} bpm'
+                : 'BLE HR',
+            _includeBleHr,
+            _onBleChipTap,
+            const Color(0xFF00E676),
+          ),
+          const SizedBox(width: 8),
+          _sensorChip(
+            theme,
+            dark,
             Icons.wb_sunny_rounded,
             'Weather',
             _includeEnvironment,
@@ -727,18 +739,6 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
             _includeCalendar,
             () => setState(() => _includeCalendar = !_includeCalendar),
             Colors.purple,
-          ),
-          const SizedBox(width: 8),
-          _sensorChip(
-            theme,
-            dark,
-            Icons.bluetooth_rounded,
-            _bleState == BleConnectionState.streaming
-                ? '${_liveHr ?? '--'} bpm'
-                : 'BLE HR',
-            _includeBleHr,
-            _onBleChipTap,
-            const Color(0xFF00E676),
           ),
         ],
       ),
