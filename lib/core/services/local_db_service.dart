@@ -2,6 +2,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../models/body_blog_entry.dart';
+import '../models/body_blog_version.dart';
 import '../models/capture_entry.dart';
 
 /// Snapshot of database metadata for the debug panel.
@@ -33,7 +34,8 @@ class LocalDbService {
   static const _tableEntries = 'entries';
   static const _tableSettings = 'settings';
   static const _tableCaptures = 'captures';
-  static const _schemaVersion = 7;
+  static const _tableVersions = 'body_blog_versions';
+  static const _schemaVersion = 8;
 
   Database? _db;
 
@@ -106,6 +108,24 @@ class LocalDbService {
     ''');
     await db.execute('''
       CREATE INDEX idx_captures_processed ON $_tableCaptures(is_processed)
+    ''');
+    await db.execute('''
+      CREATE TABLE $_tableVersions (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        date         TEXT    NOT NULL,
+        generated_at TEXT    NOT NULL,
+        trigger      TEXT    NOT NULL,
+        headline     TEXT    NOT NULL,
+        summary      TEXT    NOT NULL,
+        full_body    TEXT    NOT NULL,
+        mood         TEXT    NOT NULL,
+        mood_emoji   TEXT    NOT NULL,
+        tags         TEXT    NOT NULL DEFAULT '[]',
+        ai_generated INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+    await db.execute('''
+      CREATE INDEX idx_versions_date ON $_tableVersions(date DESC)
     ''');
   }
 
@@ -197,6 +217,28 @@ class LocalDbService {
         if (!e.toString().toLowerCase().contains('duplicate column')) rethrow;
       }
     }
+    if (oldVersion < 8) {
+      // v7 → v8: add immutable version-history table for body blog entries
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $_tableVersions (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          date         TEXT    NOT NULL,
+          generated_at TEXT    NOT NULL,
+          trigger      TEXT    NOT NULL,
+          headline     TEXT    NOT NULL,
+          summary      TEXT    NOT NULL,
+          full_body    TEXT    NOT NULL,
+          mood         TEXT    NOT NULL,
+          mood_emoji   TEXT    NOT NULL,
+          tags         TEXT    NOT NULL DEFAULT '[]',
+          ai_generated INTEGER NOT NULL DEFAULT 0
+        )
+      ''');
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_versions_date
+        ON $_tableVersions(date DESC)
+      ''');
+    }
   }
 
   Future<void> close() async {
@@ -248,6 +290,38 @@ class LocalDbService {
       _toRow(entry),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  /// Append an immutable version snapshot for [entry] to the history table.
+  ///
+  /// The [trigger] should be one of the [BlogVersionTrigger] constants.
+  /// This is a pure INSERT — existing rows are never modified or deleted.
+  Future<void> appendVersion(BodyBlogEntry entry, String trigger) async {
+    final db = await _database;
+    await db.insert(_tableVersions, {
+      'date': _dateKey(entry.date),
+      'generated_at': DateTime.now().toIso8601String(),
+      'trigger': trigger,
+      'headline': entry.headline,
+      'summary': entry.summary,
+      'full_body': entry.fullBody,
+      'mood': entry.mood,
+      'mood_emoji': entry.moodEmoji,
+      'tags': entry.toJson()['tags'],
+      'ai_generated': entry.aiGenerated ? 1 : 0,
+    });
+  }
+
+  /// Load all version snapshots for [date], newest first.
+  Future<List<BodyBlogVersion>> loadVersionsForDate(DateTime date) async {
+    final db = await _database;
+    final rows = await db.query(
+      _tableVersions,
+      where: 'date = ?',
+      whereArgs: [_dateKey(date)],
+      orderBy: 'generated_at DESC',
+    );
+    return rows.map(BodyBlogVersion.fromJson).toList();
   }
 
   /// Load entry for a specific date, or `null` if not stored yet.

@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/models/body_blog_entry.dart';
+import '../../../core/models/body_blog_version.dart';
 import '../../../core/services/service_providers.dart';
 import '../../shared/widgets/app_header.dart';
 import '../../shared/widgets/health_permission_card.dart';
@@ -193,6 +194,8 @@ class _BodyBlogScreenState extends ConsumerState<BodyBlogScreen> {
                                     isToday: i == 0,
                                     isRefreshing: _refreshing,
                                     onRefresh: _refresh,
+                                    onViewHistory: () =>
+                                        _showHistory(context, _entries[i].date),
                                   ),
                                 ),
                               ),
@@ -250,6 +253,17 @@ class _BodyBlogScreenState extends ConsumerState<BodyBlogScreen> {
         )
         .then((_) => _load()); // refresh list with any AI changes from detail
   }
+
+  Future<void> _showHistory(BuildContext context, DateTime date) async {
+    final versions = await _blogService.loadVersionsForDate(date);
+    if (!context.mounted) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _VersionHistorySheet(date: date, versions: versions),
+    );
+  }
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -263,6 +277,7 @@ class _BlogPage extends StatelessWidget {
     this.isToday = false,
     this.isRefreshing = false,
     this.onRefresh,
+    this.onViewHistory,
   });
 
   final BodyBlogEntry entry;
@@ -270,6 +285,7 @@ class _BlogPage extends StatelessWidget {
   final bool isToday;
   final bool isRefreshing;
   final VoidCallback? onRefresh;
+  final VoidCallback? onViewHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -468,6 +484,36 @@ class _BlogPage extends StatelessWidget {
                   ),
                 ),
               ),
+
+            // ── version history ──
+            const SizedBox(height: 16),
+            Center(
+              child: TextButton.icon(
+                onPressed: onViewHistory,
+                icon: Icon(
+                  Icons.history_rounded,
+                  size: 15,
+                  color: dark ? Colors.white30 : Colors.black26,
+                ),
+                label: Text(
+                  'Day history',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    color: dark ? Colors.white38 : Colors.black38,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ),
 
             const SizedBox(height: 32),
           ],
@@ -2464,6 +2510,388 @@ class _BlogDetailPageState extends ConsumerState<_BlogDetailPage> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  VERSION HISTORY — bottom sheet + tile
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// Draggable bottom sheet that shows the full version history for a given day.
+class _VersionHistorySheet extends StatelessWidget {
+  const _VersionHistorySheet({required this.date, required this.versions});
+
+  final DateTime date;
+  final List<BodyBlogVersion> versions;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final primary = Theme.of(context).colorScheme.primary;
+    final bg = dark ? const Color(0xFF1A1A1A) : Colors.white;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.55,
+      minChildSize: 0.3,
+      maxChildSize: 0.92,
+      builder: (_, scrollCtrl) => Container(
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            // drag handle
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: dark ? Colors.white24 : Colors.black12,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            // header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 16, 4),
+              child: Row(
+                children: [
+                  Icon(Icons.history_rounded, size: 18, color: primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Day history  ·  ${DateFormat('MMM d').format(date)}',
+                    style: GoogleFonts.inter(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: dark
+                          ? Colors.white.withValues(alpha: 0.87)
+                          : Colors.black87,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${versions.length} version${versions.length != 1 ? 's' : ''}',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: dark ? Colors.white38 : Colors.black38,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: versions.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No history recorded yet.',
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          color: dark ? Colors.white38 : Colors.black38,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: scrollCtrl,
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                      itemCount: versions.length,
+                      itemBuilder: (_, i) => _VersionTile(
+                        version: versions[i],
+                        isLatest: i == 0,
+                        isLast: i == versions.length - 1,
+                        dark: dark,
+                        primary: primary,
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A single row in the version history timeline.
+class _VersionTile extends StatelessWidget {
+  const _VersionTile({
+    required this.version,
+    required this.isLatest,
+    required this.isLast,
+    required this.dark,
+    required this.primary,
+  });
+
+  final BodyBlogVersion version;
+  final bool isLatest;
+  final bool isLast;
+  final bool dark;
+  final Color primary;
+
+  String get _triggerLabel {
+    switch (version.trigger) {
+      case 'draft':
+        return 'Draft saved';
+      case 'ai_enriched':
+        return 'AI written';
+      case 'refresh':
+        return 'Refreshed';
+      case 'incremental':
+        return 'Updated';
+      case 'regen':
+        return 'Regenerated';
+      default:
+        return version.trigger;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final timeStr = DateFormat('HH:mm').format(version.generatedAt.toLocal());
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // timeline track
+          SizedBox(
+            width: 32,
+            child: Column(
+              children: [
+                const SizedBox(height: 14),
+                Container(
+                  width: 9,
+                  height: 9,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isLatest
+                        ? primary
+                        : (dark ? Colors.white24 : Colors.black26),
+                  ),
+                ),
+                if (!isLast)
+                  Expanded(
+                    child: Container(
+                      width: 1.5,
+                      margin: const EdgeInsets.only(top: 4),
+                      color: dark
+                          ? Colors.white12
+                          : Colors.black.withValues(alpha: 0.08),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // content card
+          Expanded(
+            child: GestureDetector(
+              onTap: () => _showDetail(context),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: dark
+                      ? Colors.white.withValues(alpha: 0.04)
+                      : Colors.black.withValues(alpha: 0.03),
+                  borderRadius: BorderRadius.circular(12),
+                  border: isLatest
+                      ? Border.all(
+                          color: primary.withValues(alpha: 0.18),
+                          width: 1,
+                        )
+                      : null,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          timeStr,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: isLatest
+                                ? primary
+                                : (dark ? Colors.white54 : Colors.black45),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isLatest
+                                ? primary.withValues(alpha: 0.12)
+                                : (dark
+                                      ? Colors.white.withValues(alpha: 0.06)
+                                      : Colors.black.withValues(alpha: 0.05)),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            _triggerLabel.toUpperCase(),
+                            style: GoogleFonts.inter(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.6,
+                              color: isLatest
+                                  ? primary
+                                  : (dark ? Colors.white54 : Colors.black45),
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          version.moodEmoji,
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                        if (version.aiGenerated) ...[
+                          const SizedBox(width: 4),
+                          const _AiBadge(),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      version.headline,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.playfairDisplay(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
+                        color: dark
+                            ? Colors.white.withValues(alpha: 0.87)
+                            : Colors.black87,
+                      ),
+                    ),
+                    if (version.summary.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        version.summary,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: dark ? Colors.white38 : Colors.black38,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDetail(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final primary = Theme.of(context).colorScheme.primary;
+    showDialog<void>(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: dark ? const Color(0xFF1E1E1E) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      DateFormat('HH:mm').format(version.generatedAt.toLocal()),
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.2,
+                        color: primary,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _triggerLabel.toUpperCase(),
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.2,
+                        color: dark ? Colors.white38 : Colors.black38,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${version.moodEmoji}  ${version.mood.toUpperCase()}',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: dark ? Colors.white38 : Colors.black38,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  version.headline,
+                  style: GoogleFonts.playfairDisplay(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    height: 1.3,
+                    color: dark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  version.summary,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    height: 1.65,
+                    color: dark ? Colors.white70 : Colors.black54,
+                  ),
+                ),
+                if (version.fullBody.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: 32,
+                    height: 1.5,
+                    color: primary.withValues(alpha: 0.3),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    version.fullBody,
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      height: 1.7,
+                      fontWeight: FontWeight.w300,
+                      color: dark ? Colors.white70 : Colors.black54,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 20),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: Text(
+                      'Close',
+                      style: GoogleFonts.inter(fontSize: 13),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

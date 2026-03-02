@@ -2,6 +2,7 @@ import 'package:device_calendar/device_calendar.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/body_blog_entry.dart';
+import '../models/body_blog_version.dart';
 import '../models/capture_entry.dart';
 import 'ambient_scan_service.dart';
 import 'calendar_service.dart';
@@ -70,6 +71,7 @@ class BodyBlogService {
         captureOverride: unprocessed,
       );
       await _db.saveEntry(updated);
+      await _db.appendVersion(updated, BlogVersionTrigger.incremental);
       await _db.markCapturesProcessed(unprocessed.map((c) => c.id).toList());
       return updated;
     }
@@ -85,10 +87,12 @@ class BodyBlogService {
     // the app is killed, or the device loses connectivity. The AI enrichment
     // below will overwrite this draft with richer content when it succeeds.
     await _db.saveEntry(entry);
+    await _db.appendVersion(entry, BlogVersionTrigger.draft);
 
     final enriched = await _applyAi(now, entry, snapshot);
     if (!identical(enriched, entry)) {
       await _db.saveEntry(enriched);
+      await _db.appendVersion(enriched, BlogVersionTrigger.aiEnriched);
       entry = enriched;
     }
 
@@ -126,11 +130,13 @@ class BodyBlogService {
     // ── SAVE LOCAL DRAFT IMMEDIATELY ──
     // Protects against data loss if the AI call does not complete.
     await _db.saveEntry(entry);
+    await _db.appendVersion(entry, BlogVersionTrigger.draft);
 
     final enriched = await _applyAi(now, entry, snapshot);
     if (!identical(enriched, entry)) {
       entry = enriched;
       await _db.saveEntry(entry);
+      await _db.appendVersion(entry, BlogVersionTrigger.refresh);
     }
 
     // Mark every capture for today as processed.
@@ -178,10 +184,12 @@ class BodyBlogService {
 
     // Save local draft first so the entry survives if AI times out.
     await _db.saveEntry(base);
+    await _db.appendVersion(base, BlogVersionTrigger.draft);
 
     final updated = await _applyAi(today, base, snapshot);
     if (!identical(updated, base)) {
       await _db.saveEntry(updated);
+      await _db.appendVersion(updated, BlogVersionTrigger.regen);
     }
 
     // Mark all captures for today as processed.
@@ -232,6 +240,13 @@ class BodyBlogService {
   }) {
     return _db.updateUserNote(date, note, mood: mood);
   }
+
+  /// Return all saved version snapshots for [date], newest first.
+  ///
+  /// Returns an empty list for days recorded before the time-machine feature
+  /// was added (schema v8).
+  Future<List<BodyBlogVersion>> loadVersionsForDate(DateTime date) =>
+      _db.loadVersionsForDate(date);
 
   // ── capture bridge ──────────────────────────────────────────────
 
