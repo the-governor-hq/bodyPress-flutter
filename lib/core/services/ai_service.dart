@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
@@ -22,6 +23,12 @@ import '../models/ai_models.dart';
 class AiService {
   static const String _baseUrl = 'https://ai.governor-hq.com';
 
+  /// HTTP status codes that are transient and safe to retry.
+  static const _retryableStatusCodes = {429, 503, 529};
+
+  /// Maximum number of attempts (1 original + 2 retries).
+  static const _maxAttempts = 3;
+
   /// API key resolved in order:
   ///  1. Compile-time `--dart-define=AI_API_KEY=...` (CI builds)
   ///  2. Runtime `.env` file loaded by flutter_dotenv (local dev)
@@ -36,6 +43,9 @@ class AiService {
   AiService({http.Client? client}) : _client = client ?? http.Client();
 
   /// Send a chat completion request with the given messages.
+  ///
+  /// Automatically retries up to [_maxAttempts] times with exponential backoff
+  /// when the server responds with a transient error (429 / 503 / 529).
   ///
   /// Returns the full [ChatCompletionResponse] from the API.
   /// Throws [AiServiceException] on failure.
@@ -53,23 +63,27 @@ class AiService {
       stream: false,
     );
 
-    try {
-      final response = await _client
-          .post(
-            Uri.parse('$_baseUrl/v1/chat/completions'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $_apiKey',
-            },
-            body: jsonEncode(request.toJson()),
-          )
-          .timeout(const Duration(seconds: 60));
+    AiServiceException? lastException;
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        return ChatCompletionResponse.fromJson(data);
-      } else {
-        // Try to extract error message from response body
+    for (var attempt = 1; attempt <= _maxAttempts; attempt++) {
+      try {
+        final response = await _client
+            .post(
+              Uri.parse('$_baseUrl/v1/chat/completions'),
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer $_apiKey',
+              },
+              body: jsonEncode(request.toJson()),
+            )
+            .timeout(const Duration(seconds: 60));
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body) as Map<String, dynamic>;
+          return ChatCompletionResponse.fromJson(data);
+        }
+
+        // Try to extract error message from response body.
         String errorMsg = 'Request failed';
         try {
           final errorData = jsonDecode(response.body) as Map<String, dynamic>;
@@ -80,16 +94,47 @@ class AiService {
               : 'HTTP ${response.statusCode}';
         }
 
-        throw AiServiceException(errorMsg, statusCode: response.statusCode);
+        lastException = AiServiceException(
+          errorMsg,
+          statusCode: response.statusCode,
+        );
+
+        if (!_retryableStatusCodes.contains(response.statusCode)) {
+          // Non-retryable error (e.g. 401, 400) — fail immediately.
+          throw lastException;
+        }
+
+        // Retryable — wait before next attempt (1 s, 2 s, …).
+        if (attempt < _maxAttempts) {
+          final delay = Duration(seconds: attempt);
+          debugPrint(
+            '[AiService] HTTP ${response.statusCode} on attempt $attempt/$_maxAttempts — '
+            'retrying in ${delay.inSeconds}s…',
+          );
+          await Future<void>.delayed(delay);
+        }
+      } on TimeoutException {
+        lastException = const AiServiceException('Request timed out');
+        if (attempt < _maxAttempts) {
+          final delay = Duration(seconds: attempt);
+          debugPrint(
+            '[AiService] Timeout on attempt $attempt/$_maxAttempts — '
+            'retrying in ${delay.inSeconds}s…',
+          );
+          await Future<void>.delayed(delay);
+        }
+      } on http.ClientException catch (e) {
+        throw AiServiceException(
+          'Network error: ${e.message}',
+          originalError: e,
+        );
+      } catch (e) {
+        if (e is AiServiceException) rethrow;
+        throw AiServiceException('Unexpected error: $e', originalError: e);
       }
-    } on TimeoutException {
-      throw const AiServiceException('Request timed out');
-    } on http.ClientException catch (e) {
-      throw AiServiceException('Network error: ${e.message}', originalError: e);
-    } catch (e) {
-      if (e is AiServiceException) rethrow;
-      throw AiServiceException('Unexpected error: $e', originalError: e);
     }
+
+    throw lastException ?? const AiServiceException('Request failed');
   }
 
   /// Simplified method to get a quick AI response from a single user prompt.
