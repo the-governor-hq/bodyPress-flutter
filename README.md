@@ -5,6 +5,10 @@
 Your body writes a journal every day — BodyPress reads it. A cross-platform Flutter app that collects physiological, environmental, and behavioural signals from device sensors, then synthesises them into a daily first-person narrative: a blog written _by_ your body, _for_ you.
 
 <p>
+  <img width="300" alt="image" src="https://github.com/user-attachments/assets/400c148d-80cc-4614-b224-e1b11ff16a29" />
+  <img width="300" alt="image" src="https://github.com/user-attachments/assets/89eb3103-79c0-4b05-8a16-2f077ef2c46b" />
+<img width="300"  alt="image" src="https://github.com/user-attachments/assets/6afd6d98-23a1-4cd2-9c2d-cd3e9c2d3841" />
+
   <img width="300" alt="Journal" src="https://github.com/user-attachments/assets/83c0a31e-1cfe-48e3-9478-9fcbf6c12dcc" />
   <img width="300" alt="Capture" src="https://github.com/user-attachments/assets/4a6de629-54b0-40f4-af2a-b8650b305fd2" />
   <img width="300" alt="Patterns" src="https://github.com/user-attachments/assets/7b58bd67-4dc1-4cd4-88a7-6a177d931bb1" />
