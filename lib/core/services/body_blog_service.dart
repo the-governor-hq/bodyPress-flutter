@@ -531,8 +531,9 @@ class BodyBlogService {
   String _buildSummary(BodySnapshot s, String mood) {
     // Factual data only — AI will replace with an interpreted narrative.
     final parts = <String>[];
-    if (s.sleepHours > 0)
+    if (s.sleepHours > 0) {
       parts.add('${s.sleepHours.toStringAsFixed(1)}h sleep');
+    }
     if (s.steps > 0) parts.add('${s.steps} steps');
     if (s.distanceKm > 0) parts.add('${s.distanceKm.toStringAsFixed(1)} km');
     if (s.avgHeartRate > 0) parts.add('${s.avgHeartRate} bpm');
