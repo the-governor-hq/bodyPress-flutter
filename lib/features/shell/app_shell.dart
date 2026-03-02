@@ -14,18 +14,24 @@ class AppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Capture tab (index 2) takes over full-screen like a camera app —
+    // hide the floating nav so it doesn't compete.
+    final isCaptureTab = navigationShell.currentIndex == 2;
+
     return Scaffold(
       // Body bleeds under the floating nav bar so the blur has content to blur.
-      extendBody: true,
+      extendBody: !isCaptureTab,
       body: navigationShell,
-      bottomNavigationBar: _ChapterNav(
-        currentIndex: navigationShell.currentIndex,
-        onTap: (index) => navigationShell.goBranch(
-          index,
-          initialLocation: index == navigationShell.currentIndex,
-        ),
-        onMoreTap: () => _showMoreSheet(context),
-      ),
+      bottomNavigationBar: isCaptureTab
+          ? null
+          : _ChapterNav(
+              currentIndex: navigationShell.currentIndex,
+              onTap: (index) => navigationShell.goBranch(
+                index,
+                initialLocation: index == navigationShell.currentIndex,
+              ),
+              onMoreTap: () => _showMoreSheet(context),
+            ),
     );
   }
 

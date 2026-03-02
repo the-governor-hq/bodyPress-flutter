@@ -1,14 +1,15 @@
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/models/capture_entry.dart';
 import '../../../core/services/service_providers.dart';
-import '../../shared/widgets/app_header.dart';
 
 /// Capture tab — camera-inspired data capture.
 /// Shutter button always visible at the bottom.
@@ -263,6 +264,7 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
+    final topPad = MediaQuery.paddingOf(context).top;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
@@ -274,40 +276,7 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
           opacity: _fadeAnim,
           child: Column(
             children: [
-              // ── Pinned header ─────────────────────────────────────────
-              SafeArea(
-                bottom: false,
-                child: AppHeader(
-                  title: 'Capture',
-                  primaryAction: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_recentCaptures != null) ...[
-                        _buildMiniBadge(
-                          dark,
-                          '${_recentCaptures!.length}',
-                          Icons.layers_outlined,
-                          theme.colorScheme.primary,
-                        ),
-                        const SizedBox(width: 4),
-                        if (_unprocessedCount > 0)
-                          _buildMiniBadge(
-                            dark,
-                            '$_unprocessedCount',
-                            Icons.hourglass_empty_rounded,
-                            Colors.amber.shade600,
-                          ),
-                      ],
-                      IconButton(
-                        onPressed: _loadRecentCaptures,
-                        icon: const Icon(Icons.refresh_rounded, size: 20),
-                        tooltip: 'Refresh',
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              // ── Scrollable content ──────────────────────────────────
+              // ── Scrollable content — no header, camera-app zen ──────
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: _loadRecentCaptures,
@@ -316,10 +285,13 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
                     controller: _scrollController,
                     physics: const AlwaysScrollableScrollPhysics(),
                     slivers: [
+                      // Safe-area top spacing
+                      SliverToBoxAdapter(child: SizedBox(height: topPad + 12)),
+
                       // Viewfinder
                       SliverToBoxAdapter(
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
                           child: _buildViewfinder(theme, dark),
                         ),
                       ),
@@ -372,36 +344,6 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────────────
-  // TOP BAR
-  // ─────────────────────────────────────────────────────────────────────
-
-  Widget _buildMiniBadge(bool dark, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: color),
-          const SizedBox(width: 4),
-          Text(
-            value,
-            style: GoogleFonts.inter(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: color,
-              letterSpacing: -0.2,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1000,128 +942,378 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // CAPTURE BAR — always-visible shutter at the bottom
+  // CAPTURE BAR — camera-app style: back · shutter · gallery
   // ─────────────────────────────────────────────────────────────────────
 
   Widget _buildCaptureBar(ThemeData theme, bool dark) {
-    final bg = dark ? const Color(0xFF141416) : Colors.white;
-    final border = (dark ? Colors.white : Colors.black).withValues(alpha: 0.07);
-
-    return Container(
-      decoration: BoxDecoration(
-        color: bg,
-        border: Border(top: BorderSide(color: border)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 18),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Left stat — total
-              _shutterStat(
-                dark,
-                '${_recentCaptures?.length ?? 0}',
-                'captured',
-                theme.colorScheme.primary,
-              ),
-
-              const Spacer(),
-
-              // Shutter button
-              ScaleTransition(
-                scale: _captureScaleAnim,
-                child: GestureDetector(
-                  onTap: _isCapturing ? null : _createCapture,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _isCapturing
-                          ? (dark ? Colors.white12 : Colors.black12)
-                          : theme.colorScheme.primary,
-                      boxShadow: _isCapturing
-                          ? null
-                          : [
-                              BoxShadow(
-                                color: theme.colorScheme.primary.withValues(
-                                  alpha: 0.35,
-                                ),
-                                blurRadius: 20,
-                                spreadRadius: 2,
-                              ),
-                            ],
-                    ),
-                    child: _isCapturing
-                        ? Center(
-                            child: SizedBox(
-                              width: 26,
-                              height: 26,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  dark ? Colors.white60 : Colors.black38,
-                                ),
-                              ),
-                            ),
-                          )
-                        : const Icon(
-                            Icons.camera_alt_rounded,
-                            color: Colors.white,
-                            size: 28,
-                          ),
-                  ),
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+        child: Container(
+          decoration: BoxDecoration(
+            color: (dark ? Colors.black : Colors.white).withValues(
+              alpha: dark ? 0.55 : 0.72,
+            ),
+            border: Border(
+              top: BorderSide(
+                color: (dark ? Colors.white : Colors.black).withValues(
+                  alpha: 0.07,
                 ),
               ),
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // ← Back — returns to Journal
+                  _camIconButton(
+                    icon: Icons.arrow_back_ios_new_rounded,
+                    dark: dark,
+                    onTap: () => context.go('/journal'),
+                  ),
 
-              const Spacer(),
+                  const Spacer(),
 
-              // Right stat — pending AI
-              _shutterStat(
-                dark,
-                '$_unprocessedCount',
-                'pending',
-                _unprocessedCount > 0
-                    ? Colors.amber.shade600
-                    : (dark
-                          ? Colors.white.withValues(alpha: 0.3)
-                          : Colors.black.withValues(alpha: 0.3)),
+                  // ○ Shutter
+                  ScaleTransition(
+                    scale: _captureScaleAnim,
+                    child: GestureDetector(
+                      onTap: _isCapturing ? null : _createCapture,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _isCapturing
+                              ? (dark ? Colors.white12 : Colors.black12)
+                              : theme.colorScheme.primary,
+                          boxShadow: _isCapturing
+                              ? null
+                              : [
+                                  BoxShadow(
+                                    color: theme.colorScheme.primary.withValues(
+                                      alpha: 0.4,
+                                    ),
+                                    blurRadius: 22,
+                                    spreadRadius: 2,
+                                  ),
+                                ],
+                        ),
+                        child: _isCapturing
+                            ? Center(
+                                child: SizedBox(
+                                  width: 26,
+                                  height: 26,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      dark ? Colors.white60 : Colors.black38,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : const Icon(
+                                Icons.camera_alt_rounded,
+                                color: Colors.white,
+                                size: 28,
+                              ),
+                      ),
+                    ),
+                  ),
+
+                  const Spacer(),
+
+                  // 🖼 Gallery — opens recent captures
+                  _galleryButton(theme, dark),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _shutterStat(bool dark, String value, String label, Color color) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          value,
-          style: GoogleFonts.inter(
-            fontSize: 22,
-            fontWeight: FontWeight.w300,
-            color: color,
-            letterSpacing: -0.5,
+  /// Circular icon button styled like a camera control (back / flash / etc.).
+  Widget _camIconButton({
+    required IconData icon,
+    required bool dark,
+    required VoidCallback onTap,
+    Color? color,
+    double size = 48,
+  }) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: (dark ? Colors.white : Colors.black).withValues(alpha: 0.10),
+        ),
+        child: Icon(
+          icon,
+          size: 20,
+          color: color ?? (dark ? Colors.white70 : Colors.black54),
+        ),
+      ),
+    );
+  }
+
+  /// Gallery button with optional amber badge for pending captures.
+  Widget _galleryButton(ThemeData theme, bool dark) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        _showGallerySheet();
+      },
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: (dark ? Colors.white : Colors.black).withValues(
+                  alpha: 0.10,
+                ),
+              ),
+              child: Icon(
+                Icons.photo_library_outlined,
+                size: 20,
+                color: dark ? Colors.white70 : Colors.black54,
+              ),
+            ),
+            if (_unprocessedCount > 0)
+              Positioned(
+                top: -2,
+                right: -2,
+                child: Container(
+                  width: 18,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade600,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: dark
+                          ? const Color(0xFF0D0D0F)
+                          : const Color(0xFFF6F6F8),
+                      width: 2,
+                    ),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '$_unprocessedCount',
+                    style: GoogleFonts.inter(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      height: 1,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // GALLERY SHEET — camera-roll style list of all recents
+  // ─────────────────────────────────────────────────────────────────────
+
+  void _showGallerySheet() {
+    if (_recentCaptures == null || _recentCaptures!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No captures yet — hit the shutter button to create one.',
+            style: GoogleFonts.inter(fontSize: 13),
+          ),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
           ),
         ),
-        Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 10,
-            fontWeight: FontWeight.w500,
-            letterSpacing: 0.5,
-            color: dark
-                ? Colors.white.withValues(alpha: 0.3)
-                : Colors.black.withValues(alpha: 0.3),
+      );
+      return;
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        final dark = Theme.of(sheetCtx).brightness == Brightness.dark;
+        final theme = Theme.of(sheetCtx);
+
+        return DraggableScrollableSheet(
+          initialChildSize: 0.70,
+          minChildSize: 0.45,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (_, scrollCtrl) => Container(
+            decoration: BoxDecoration(
+              color: dark ? const Color(0xFF1C1C1E) : Colors.white,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
+            ),
+            child: Column(
+              children: [
+                // ── Drag handle
+                Container(
+                  margin: const EdgeInsets.only(top: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: (dark ? Colors.white : Colors.black).withValues(
+                      alpha: 0.2,
+                    ),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+
+                // ── Header
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 16, 8),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Recents',
+                        style: GoogleFonts.playfairDisplay(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                          color: dark ? Colors.white : Colors.black87,
+                          letterSpacing: -0.4,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      // Total badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.12,
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '${_recentCaptures!.length}',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                      if (_unprocessedCount > 0) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade600.withValues(
+                              alpha: 0.12,
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.hourglass_empty_rounded,
+                                size: 11,
+                                color: Colors.amber.shade600,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$_unprocessedCount pending',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.amber.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      const Spacer(),
+                      if (_unprocessedCount > 0)
+                        TextButton.icon(
+                          onPressed: _isProcessing
+                              ? null
+                              : () {
+                                  Navigator.pop(sheetCtx);
+                                  _processAllPending();
+                                },
+                          icon: _isProcessing
+                              ? SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 1.5,
+                                    color: Colors.amber.shade600,
+                                  ),
+                                )
+                              : Icon(
+                                  Icons.play_arrow_rounded,
+                                  size: 16,
+                                  color: Colors.amber.shade600,
+                                ),
+                          label: Text(
+                            'Process all',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.amber.shade600,
+                            ),
+                          ),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
+                // ── List
+                Expanded(
+                  child: ListView.builder(
+                    controller: scrollCtrl,
+                    itemCount: _recentCaptures!.length,
+                    padding: const EdgeInsets.only(bottom: 24),
+                    itemBuilder: (_, i) =>
+                        _buildCaptureCard(theme, dark, _recentCaptures![i]),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 
