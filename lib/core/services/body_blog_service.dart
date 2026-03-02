@@ -457,19 +457,6 @@ class BodyBlogService {
     );
   }
 
-  BodyBlogEntry _composeEmpty(DateTime date) {
-    return BodyBlogEntry(
-      date: date,
-      headline: 'Waiting for data…',
-      summary: 'This day\'s journal will appear once data is synced.',
-      fullBody: '',
-      mood: 'neutral',
-      moodEmoji: '🌿',
-      tags: const [],
-      snapshot: const BodySnapshot(),
-    );
-  }
-
   // ── mood inference ──────────────────────────────────────────────
 
   String _inferMood(BodySnapshot s) {
@@ -524,188 +511,55 @@ class BodyBlogService {
   // ── headline ────────────────────────────────────────────────────
 
   String _buildHeadline(BodySnapshot s, String mood) {
-    switch (mood) {
-      case 'energised':
-        return 'Your body is buzzing with energy today';
-      case 'tired':
-        return 'A gentle start — your body is asking for rest';
-      case 'active':
-        return 'On the move — your body is loving the motion';
-      case 'cautious':
-        return 'The air outside needs your attention';
-      case 'rested':
-        return 'Well-rested — a calm canvas for the day';
-      case 'quiet':
-        return 'A still morning — your body is listening';
-      default:
-        return 'Your body speaks — a moment of awareness';
+    // Raw-data headline — no editorial spin. AI will replace this.
+    final hasSleep = s.sleepHours > 0;
+    final hasSteps = s.steps > 0;
+    if (hasSleep && hasSteps) {
+      return '${s.sleepHours.toStringAsFixed(1)}h sleep · ${s.steps} steps';
     }
+    if (hasSteps) return '${s.steps} steps logged';
+    if (hasSleep) return '${s.sleepHours.toStringAsFixed(1)} hours of sleep';
+    if (s.avgHeartRate > 0) return '${s.avgHeartRate} bpm avg heart rate';
+    if (s.caloriesBurned > 0) {
+      return '${s.caloriesBurned.toStringAsFixed(0)} kcal burned';
+    }
+    return 'No health data collected yet';
   }
 
-  // ── summary (2-3 sentences) ─────────────────────────────────────
+  // ── summary (raw data, no editorial) ─────────────────────────────────────
 
   String _buildSummary(BodySnapshot s, String mood) {
+    // Factual data only — AI will replace with an interpreted narrative.
     final parts = <String>[];
-
-    // Sleep
-    if (s.sleepHours > 0) {
-      if (s.sleepHours >= 7) {
-        parts.add(
-          'You got ${s.sleepHours.toStringAsFixed(1)} hours of sleep — your body feels recharged.',
-        );
-      } else if (s.sleepHours >= 5) {
-        parts.add(
-          '${s.sleepHours.toStringAsFixed(1)} hours of sleep. Decent, but your body wouldn\'t mind a bit more.',
-        );
-      } else {
-        parts.add(
-          'Only ${s.sleepHours.toStringAsFixed(1)} hours of sleep. Your body is flagging this — consider resting early tonight.',
-        );
-      }
+    if (s.sleepHours > 0)
+      parts.add('${s.sleepHours.toStringAsFixed(1)}h sleep');
+    if (s.steps > 0) parts.add('${s.steps} steps');
+    if (s.distanceKm > 0) parts.add('${s.distanceKm.toStringAsFixed(1)} km');
+    if (s.avgHeartRate > 0) parts.add('${s.avgHeartRate} bpm');
+    if (s.caloriesBurned > 0) {
+      parts.add('${s.caloriesBurned.toStringAsFixed(0)} kcal');
     }
-
-    // Activity
-    if (s.steps > 0) {
-      if (s.steps >= 8000) {
-        parts.add(
-          '${s.steps} steps so far — your muscles are grateful for the movement.',
-        );
-      } else if (s.steps >= 3000) {
-        parts.add(
-          '${s.steps} steps and counting. A steady rhythm your body appreciates.',
-        );
-      } else {
-        parts.add(
-          '${s.steps} steps today. Even small movements matter — your joints agree.',
-        );
-      }
+    if (s.workouts > 0) {
+      parts.add('${s.workouts} workout${s.workouts > 1 ? 's' : ''}');
     }
-
-    // Environment
     if (s.weatherDesc != null && s.city != null) {
       parts.add(
-        'Outside in ${s.city}: ${s.weatherDesc}, ${s.temperatureC?.toStringAsFixed(0) ?? '-'}°C.',
+        '${s.city}: ${s.weatherDesc}, ${s.temperatureC?.toStringAsFixed(0) ?? '—'}°C',
       );
+    } else if (s.temperatureC != null) {
+      parts.add('${s.temperatureC!.toStringAsFixed(0)}°C');
     }
+    if (s.aqiUs != null) parts.add('AQI ${s.aqiUs}');
 
     if (parts.isEmpty) {
-      parts.add('Your body is present. Data will fill in as the day unfolds.');
+      return 'No health data available. Grant health permissions to start tracking.';
     }
-
-    return parts.join(' ');
+    return parts.join(' · ');
   }
 
-  // ── full body (long-form narrative) ─────────────────────────────
+  // ── full body ────────────────────────────────────────────────────
 
-  String _buildBody(BodySnapshot s, String mood) {
-    final buf = StringBuffer();
-
-    // Sleep section
-    if (s.sleepHours > 0) {
-      buf.writeln('— Sleep —');
-      if (s.sleepHours >= 7) {
-        buf.writeln(
-          'Last night you gave me ${s.sleepHours.toStringAsFixed(1)} hours of rest. '
-          'My cells are humming with recovery. Muscles rebuilt, memories '
-          'consolidated, immune defences topped up. Thank you.',
-        );
-      } else {
-        buf.writeln(
-          'I only got ${s.sleepHours.toStringAsFixed(1)} hours last night. '
-          'I can feel the deficit — cortisol is a touch higher, focus may '
-          'wander. If you can, a 20-minute nap today would be a gift.',
-        );
-      }
-      buf.writeln();
-    }
-
-    // Movement section
-    if (s.steps > 0 || s.caloriesBurned > 0) {
-      buf.writeln('— Movement —');
-      if (s.steps > 0) {
-        buf.writeln(
-          'So far: ${s.steps} steps, ${s.distanceKm.toStringAsFixed(1)} km. ',
-        );
-      }
-      if (s.caloriesBurned > 0) {
-        buf.writeln(
-          'Energy spent: ${s.caloriesBurned.toStringAsFixed(0)} kcal. ',
-        );
-      }
-      if (s.workouts > 0) {
-        buf.writeln(
-          'I registered ${s.workouts} workout${s.workouts > 1 ? 's' : ''} today — well done.',
-        );
-      }
-      buf.writeln(
-        'Every step sends oxygen through me, feeds the brain, nudges '
-        'the lymphatic system awake. Keep it up.',
-      );
-      buf.writeln();
-    }
-
-    // Heart
-    if (s.avgHeartRate > 0) {
-      buf.writeln('— Heart —');
-      buf.writeln('Average heart rate today: ${s.avgHeartRate} bpm. ');
-      if (s.avgHeartRate < 70) {
-        buf.writeln('Calm and steady — a sign of good cardiovascular fitness.');
-      } else if (s.avgHeartRate < 90) {
-        buf.writeln('Normal range. Your ticker is doing just fine.');
-      } else {
-        buf.writeln(
-          'A bit elevated. Could be exertion, stress, or caffeine — '
-          'I\'ll keep monitoring.',
-        );
-      }
-      buf.writeln();
-    }
-
-    // Environment
-    if (s.weatherDesc != null) {
-      buf.writeln('— Environment —');
-      buf.write(
-        '${s.city != null ? 'In ${s.city}' : 'Your area'}: '
-        '${s.weatherDesc}, ${s.temperatureC?.toStringAsFixed(0) ?? '-'}°C.',
-      );
-      if (s.aqiUs != null) {
-        buf.write(' Air quality index: ${s.aqiUs}.');
-        if (s.aqiUs! > 100) {
-          buf.write(
-            ' That\'s moderate-to-poor — consider limiting outdoor exertion.',
-          );
-        }
-      }
-      if (s.uvIndex != null && s.uvIndex! > 5) {
-        buf.write(
-          ' UV is ${s.uvIndex!.toStringAsFixed(1)} — sunscreen advised.',
-        );
-      }
-      buf.writeln();
-      buf.writeln();
-    }
-
-    // Calendar
-    if (s.calendarEvents.isNotEmpty) {
-      buf.writeln('— Your Agenda —');
-      buf.writeln(
-        'You have ${s.calendarEvents.length} event${s.calendarEvents.length > 1 ? 's' : ''} today:',
-      );
-      for (final ev in s.calendarEvents) {
-        buf.writeln('  • $ev');
-      }
-      buf.writeln(
-        '\nRemember to breathe between commitments. I do better when '
-        'you take micro-breaks.',
-      );
-      buf.writeln();
-    }
-
-    // Closing
-    buf.writeln('—');
-    buf.writeln('Stay present. I\'m always here, listening.');
-    buf.writeln('\nYour Body');
-
-    return buf.toString();
-  }
+  // Returns empty string — the detail view shows a pending-AI panel
+  // until the AI fills in the narrative.
+  String _buildBody(BodySnapshot s, String mood) => '';
 }

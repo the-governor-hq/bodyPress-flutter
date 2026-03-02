@@ -307,6 +307,9 @@ class _BlogPage extends StatelessWidget {
                 if (entry.aiGenerated) ...[
                   const _AiBadge(),
                   const SizedBox(width: 10),
+                ] else ...[
+                  const _RawDataBadge(),
+                  const SizedBox(width: 10),
                 ],
                 Text(entry.moodEmoji, style: const TextStyle(fontSize: 22)),
                 const SizedBox(width: 6),
@@ -1078,6 +1081,296 @@ class _AiBadge extends StatelessWidget {
               letterSpacing: 0.5,
               color: primary,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  RAW DATA BADGE — shown on cards when AI has not generated content yet
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _RawDataBadge extends StatelessWidget {
+  const _RawDataBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final color = dark ? Colors.white38 : Colors.black38;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.data_usage_rounded, size: 10, color: color),
+          const SizedBox(width: 3),
+          Text(
+            'Raw data',
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  PENDING AI PANEL — shown in the detail view when fullBody is empty
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PendingAiPanel extends StatelessWidget {
+  const _PendingAiPanel({required this.snapshot});
+  final BodySnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final dimColor = dark ? Colors.white54 : Colors.black45;
+    final labelStyle = GoogleFonts.inter(
+      fontSize: 11,
+      fontWeight: FontWeight.w500,
+      letterSpacing: 0.4,
+      color: dimColor,
+    );
+    final valueStyle = GoogleFonts.inter(
+      fontSize: 15,
+      fontWeight: FontWeight.w600,
+      color: dark ? Colors.white.withValues(alpha: 0.87) : Colors.black87,
+    );
+
+    final hasAnyData =
+        snapshot.steps > 0 ||
+        snapshot.sleepHours > 0 ||
+        snapshot.avgHeartRate > 0 ||
+        snapshot.caloriesBurned > 0 ||
+        snapshot.temperatureC != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (!hasAnyData) ...[
+          // ── no data state ──
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: (dark ? Colors.white : Colors.black).withValues(
+                alpha: 0.04,
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: (dark ? Colors.white : Colors.black).withValues(
+                  alpha: 0.08,
+                ),
+              ),
+            ),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.sensors_off_rounded,
+                  size: 32,
+                  color: dimColor.withValues(alpha: 0.5),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'No health data collected yet',
+                  style: GoogleFonts.inter(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: dark ? Colors.white70 : Colors.black54,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Grant health permissions so the app can read your\nsteps, sleep and heart rate.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    height: 1.6,
+                    color: dimColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ] else ...[
+          // ── raw data grid ──
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              if (snapshot.sleepHours > 0)
+                _DataTile(
+                  icon: Icons.bedtime_rounded,
+                  label: 'Sleep',
+                  value: '${snapshot.sleepHours.toStringAsFixed(1)} h',
+                ),
+              if (snapshot.steps > 0)
+                _DataTile(
+                  icon: Icons.directions_walk_rounded,
+                  label: 'Steps',
+                  value: snapshot.steps.toString(),
+                ),
+              if (snapshot.avgHeartRate > 0)
+                _DataTile(
+                  icon: Icons.favorite_rounded,
+                  label: 'Heart rate',
+                  value: '${snapshot.avgHeartRate} bpm',
+                ),
+              if (snapshot.caloriesBurned > 0)
+                _DataTile(
+                  icon: Icons.local_fire_department_rounded,
+                  label: 'Calories',
+                  value: '${snapshot.caloriesBurned.toStringAsFixed(0)} kcal',
+                ),
+              if (snapshot.distanceKm > 0)
+                _DataTile(
+                  icon: Icons.route_rounded,
+                  label: 'Distance',
+                  value: '${snapshot.distanceKm.toStringAsFixed(1)} km',
+                ),
+              if (snapshot.temperatureC != null)
+                _DataTile(
+                  icon: Icons.thermostat_rounded,
+                  label: snapshot.city ?? 'Temp',
+                  value:
+                      '${snapshot.temperatureC!.toStringAsFixed(0)}°C'
+                      '${snapshot.weatherDesc != null ? "  ${snapshot.weatherDesc}" : ""}',
+                ),
+              if (snapshot.aqiUs != null)
+                _DataTile(
+                  icon: Icons.air_rounded,
+                  label: 'AQI',
+                  value: snapshot.aqiUs.toString(),
+                ),
+            ],
+          ),
+          if (snapshot.calendarEvents.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text('Events today', style: labelStyle),
+            const SizedBox(height: 6),
+            for (final ev in snapshot.calendarEvents)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.calendar_today_rounded,
+                      size: 13,
+                      color: primary.withValues(alpha: 0.6),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(ev, style: valueStyle)),
+                  ],
+                ),
+              ),
+          ],
+          const SizedBox(height: 20),
+          // ── AI pending note ──
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: primary.withValues(alpha: dark ? 0.08 : 0.05),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: primary.withValues(alpha: dark ? 0.20 : 0.15),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 14,
+                  color: primary.withValues(alpha: 0.7),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'AI insights not yet generated. Tap ✦ in the header to write your entry.',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      height: 1.5,
+                      color: dark ? Colors.white60 : Colors.black45,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  DATA TILE — compact metric card used in _PendingAiPanel
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _DataTile extends StatelessWidget {
+  const _DataTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: (dark ? Colors.white : Colors.black).withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: (dark ? Colors.white : Colors.black).withValues(alpha: 0.08),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: primary.withValues(alpha: 0.7)),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label.toUpperCase(),
+                style: GoogleFonts.inter(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.8,
+                  color: dark ? Colors.white38 : Colors.black38,
+                ),
+              ),
+              Text(
+                value,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: dark
+                      ? Colors.white.withValues(alpha: 0.87)
+                      : Colors.black87,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -2037,15 +2330,18 @@ class _BlogDetailPageState extends ConsumerState<_BlogDetailPage> {
                     const SizedBox(height: 24),
 
                     // full body
-                    Text(
-                      _entry.fullBody,
-                      style: GoogleFonts.inter(
-                        fontSize: 15,
-                        height: 1.85,
-                        fontWeight: FontWeight.w300,
-                        color: dark ? Colors.white70 : Colors.black54,
-                      ),
-                    ),
+                    if (_entry.fullBody.isNotEmpty)
+                      Text(
+                        _entry.fullBody,
+                        style: GoogleFonts.inter(
+                          fontSize: 15,
+                          height: 1.85,
+                          fontWeight: FontWeight.w300,
+                          color: dark ? Colors.white70 : Colors.black54,
+                        ),
+                      )
+                    else
+                      _PendingAiPanel(snapshot: _entry.snapshot),
 
                     const SizedBox(height: 32),
 
