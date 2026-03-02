@@ -375,6 +375,11 @@ class _BlogPage extends StatelessWidget {
             // ── snapshot glance ──
             _SnapshotGlance(snapshot: entry.snapshot),
 
+            const SizedBox(height: 20),
+
+            // ── sensor status ──
+            _SensorStatusRow(snapshot: entry.snapshot),
+
             const SizedBox(height: 28),
 
             // ── refresh day button (today only) ──
@@ -604,6 +609,198 @@ class _Tag extends StatelessWidget {
           fontSize: 12,
           fontWeight: FontWeight.w500,
           color: dark ? Colors.white54 : Colors.black45,
+        ),
+      ),
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  SENSOR STATUS ROW — data-source indicators with present/missing state
+// ═════════════════════════════════════════════════════════════════════════════
+
+class _SensorSpec {
+  final IconData icon;
+  final String label;
+  final bool present;
+  final String? valueText;
+
+  const _SensorSpec({
+    required this.icon,
+    required this.label,
+    required this.present,
+    this.valueText,
+  });
+}
+
+List<_SensorSpec> _buildSensorSpecs(BodySnapshot s) => [
+  _SensorSpec(
+    icon: Icons.directions_walk_rounded,
+    label: 'Steps',
+    present: s.steps > 0,
+    valueText: s.steps > 0 ? '${s.steps} steps' : null,
+  ),
+  _SensorSpec(
+    icon: Icons.bedtime_rounded,
+    label: 'Sleep',
+    present: s.sleepHours > 0,
+    valueText: s.sleepHours > 0 ? '${s.sleepHours.toStringAsFixed(1)} h' : null,
+  ),
+  _SensorSpec(
+    icon: Icons.favorite_rounded,
+    label: 'Heart rate',
+    present: s.avgHeartRate > 0,
+    valueText: s.avgHeartRate > 0 ? '${s.avgHeartRate} bpm' : null,
+  ),
+  _SensorSpec(
+    icon: Icons.local_fire_department_rounded,
+    label: 'Calories',
+    present: s.caloriesBurned > 0,
+    valueText: s.caloriesBurned > 0
+        ? '${s.caloriesBurned.toStringAsFixed(0)} kcal'
+        : null,
+  ),
+  _SensorSpec(
+    icon: Icons.route_rounded,
+    label: 'Distance',
+    present: s.distanceKm > 0,
+    valueText: s.distanceKm > 0
+        ? '${s.distanceKm.toStringAsFixed(1)} km'
+        : null,
+  ),
+  _SensorSpec(
+    icon: Icons.fitness_center_rounded,
+    label: 'Workouts',
+    present: s.workouts > 0,
+    valueText: s.workouts > 0
+        ? '${s.workouts} session${s.workouts > 1 ? "s" : ""}'
+        : null,
+  ),
+  _SensorSpec(
+    icon: Icons.thermostat_rounded,
+    label: 'Temperature',
+    present: s.temperatureC != null,
+    valueText: s.temperatureC != null
+        ? '${s.temperatureC!.toStringAsFixed(0)} °C'
+        : null,
+  ),
+  _SensorSpec(
+    icon: Icons.air_rounded,
+    label: 'Air quality',
+    present: s.aqiUs != null,
+    valueText: s.aqiUs != null ? 'AQI ${s.aqiUs}' : null,
+  ),
+  _SensorSpec(
+    icon: Icons.wb_sunny_rounded,
+    label: 'UV index',
+    present: s.uvIndex != null,
+    valueText: s.uvIndex != null ? 'UV ${s.uvIndex!.toStringAsFixed(1)}' : null,
+  ),
+  _SensorSpec(
+    icon: Icons.location_on_rounded,
+    label: 'Location',
+    present: s.city != null,
+    valueText: s.city,
+  ),
+  _SensorSpec(
+    icon: Icons.event_rounded,
+    label: 'Calendar',
+    present: s.calendarEvents.isNotEmpty,
+    valueText: s.calendarEvents.isNotEmpty
+        ? '${s.calendarEvents.length} event${s.calendarEvents.length > 1 ? "s" : ""}'
+        : null,
+  ),
+];
+
+/// Compact strip of sensor-source pictos.
+///
+/// Coloured circles = data was available and used in this entry's story.
+/// Muted outlines   = sensor was queried but returned no data.
+class _SensorStatusRow extends StatelessWidget {
+  const _SensorStatusRow({required this.snapshot});
+  final BodySnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final primary = Theme.of(context).colorScheme.primary;
+    final specs = _buildSensorSpecs(snapshot);
+
+    // Skip render if the entire snapshot is empty.
+    if (specs.every((s) => !s.present)) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'DATA SOURCES',
+          style: GoogleFonts.inter(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 1.4,
+            color: dark ? Colors.white24 : Colors.black26,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: specs
+              .map(
+                (spec) => _SensorDot(spec: spec, dark: dark, primary: primary),
+              )
+              .toList(),
+        ),
+      ],
+    );
+  }
+}
+
+class _SensorDot extends StatelessWidget {
+  const _SensorDot({
+    required this.spec,
+    required this.dark,
+    required this.primary,
+  });
+
+  final _SensorSpec spec;
+  final bool dark;
+  final Color primary;
+
+  @override
+  Widget build(BuildContext context) {
+    final tooltipMsg = spec.present
+        ? '${spec.label}${spec.valueText != null ? ": ${spec.valueText!}" : ""}'
+        : '${spec.label}: not available';
+
+    return Tooltip(
+      message: tooltipMsg,
+      preferBelow: true,
+      child: Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: spec.present
+              ? primary.withValues(alpha: dark ? 0.16 : 0.09)
+              : Colors.transparent,
+          border: Border.all(
+            color: spec.present
+                ? primary.withValues(alpha: dark ? 0.32 : 0.20)
+                : (dark
+                      ? Colors.white.withValues(alpha: 0.09)
+                      : Colors.black.withValues(alpha: 0.07)),
+            width: 1,
+          ),
+        ),
+        child: Icon(
+          spec.icon,
+          size: 15,
+          color: spec.present
+              ? primary.withValues(alpha: 0.80)
+              : (dark
+                    ? Colors.white.withValues(alpha: 0.18)
+                    : Colors.black.withValues(alpha: 0.16)),
         ),
       ),
     );
@@ -1824,6 +2021,11 @@ class _BlogDetailPageState extends ConsumerState<_BlogDetailPage> {
                             .map((t) => _Tag(label: t))
                             .toList(),
                       ),
+
+                    const SizedBox(height: 28),
+
+                    // ── sensor status ──
+                    _SensorStatusRow(snapshot: _entry.snapshot),
 
                     // user note block
                     if ((_entry.userNote != null &&
