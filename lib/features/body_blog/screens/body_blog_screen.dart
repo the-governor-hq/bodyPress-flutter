@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
@@ -108,12 +110,14 @@ class _BodyBlogScreenState extends ConsumerState<BodyBlogScreen> {
       builder: (_) => const _ToneSelectorBottomSheet(),
     );
 
-    // User cancelled
+    // User cancelled (dismissed the sheet without picking a tone)
     if (!mounted || tone == null) return;
 
     setState(() => _refreshing = true);
     try {
-      final fresh = await _blogService.refreshTodayEntry(tone: tone);
+      // 'default' is a sentinel — the service expects null for the default tone.
+      final effectiveTone = tone == 'default' ? null : tone;
+      final fresh = await _blogService.refreshTodayEntry(tone: effectiveTone);
       if (mounted) {
         // Replace today's entry (index 0) with the refreshed version.
         setState(() {
@@ -178,28 +182,29 @@ class _BodyBlogScreenState extends ConsumerState<BodyBlogScreen> {
             children: [
               AppHeader(
                 title: 'BodyPress',
-                primaryAction: _refreshing
-                    ? const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      )
-                    : IconButton(
-                        onPressed: _refresh,
-                        icon: Icon(
-                          Icons.chat_bubble_outline,
-                          size: 20,
-                          color: (dark ? Colors.white : Colors.black)
-                              .withValues(alpha: 0.4),
-                        ),
-                        tooltip: 'Ask what\'s up',
-                        style: IconButton.styleFrom(
-                          padding: const EdgeInsets.all(8),
-                        ),
-                      ),
+                primaryAction: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const _SensorHealthIndicator(),
+                    _refreshing
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : IconButton(
+                            onPressed: _refresh,
+                            icon: _ShimmerAiIcon(size: 20, dark: dark),
+                            tooltip: 'Generate entry',
+                            style: IconButton.styleFrom(
+                              padding: const EdgeInsets.all(8),
+                            ),
+                          ),
+                  ],
+                ),
               ),
               // Health permission banner — only visible when health access
               // is not granted on the current device.
@@ -278,7 +283,6 @@ class _BodyBlogScreenState extends ConsumerState<BodyBlogScreen> {
   }
 
   Widget _emptyState(bool dark) {
-    final primary = Theme.of(context).colorScheme.primary;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -521,13 +525,9 @@ class _BlogPage extends StatelessWidget {
                     )
                   : TextButton.icon(
                       onPressed: onRefresh,
-                      icon: Icon(
-                        Icons.chat_bubble_outline,
-                        size: 14,
-                        color: primary.withValues(alpha: 0.5),
-                      ),
+                      icon: _ShimmerAiIcon(size: 14, dark: dark),
                       label: Text(
-                        'Ask again',
+                        'Regenerate',
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           fontWeight: FontWeight.w400,
@@ -3102,11 +3102,7 @@ class _ToneSelectorBottomSheet extends StatelessWidget {
                       color: primary.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(
-                      Icons.chat_bubble_outline,
-                      color: primary,
-                      size: 28,
-                    ),
+                    child: Center(child: _ShimmerAiIcon(size: 28, dark: dark)),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -3164,7 +3160,7 @@ class _ToneSelectorBottomSheet extends StatelessWidget {
                     icon: Icons.auto_awesome,
                     label: 'Default',
                     description: 'Warm, wise, intimate narrator',
-                    tone: null,
+                    tone: 'default',
                     dark: dark,
                   ),
                   const SizedBox(height: 12),
@@ -3230,7 +3226,7 @@ class _ToneOption extends StatelessWidget {
   final IconData icon;
   final String label;
   final String description;
-  final String? tone;
+  final String tone;
   final bool dark;
 
   @override
@@ -3289,6 +3285,199 @@ class _ToneOption extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  SHIMMER AI ICON — subtle color-cycling sparkle icon for AI actions
+// ═════════════════════════════════════════════════════════════════════════════
+
+class _ShimmerAiIcon extends StatefulWidget {
+  const _ShimmerAiIcon({required this.size, required this.dark});
+  final double size;
+  final bool dark;
+
+  @override
+  State<_ShimmerAiIcon> createState() => _ShimmerAiIconState();
+}
+
+class _ShimmerAiIconState extends State<_ShimmerAiIcon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 3200),
+  )..repeat();
+
+  /// Palette: soft gold → primary → lavender → soft gold (loop)
+  static const _colors = [
+    Color(0xFFD4A853), // warm gold
+    Color(0xFFB388FF), // soft lavender
+    Color(0xFF82B1FF), // light periwinkle
+    Color(0xFFD4A853), // back to gold for smooth loop
+  ];
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, child) {
+        // Smooth sine-based oscillation for an organic feel
+        final t = (math.sin(_ctrl.value * math.pi * 2) + 1) / 2;
+
+        // Interpolate through the colour stops
+        final colorIndex = (_ctrl.value * (_colors.length - 1)).floor();
+        final localT = (_ctrl.value * (_colors.length - 1)) - colorIndex;
+        final color = Color.lerp(
+          _colors[colorIndex],
+          _colors[(colorIndex + 1).clamp(0, _colors.length - 1)],
+          localT,
+        )!;
+
+        // Gentle opacity pulse (0.45 → 0.75) so it breathes
+        final alpha = 0.45 + t * 0.30;
+
+        return Icon(
+          Icons.auto_awesome_rounded,
+          size: widget.size,
+          color: color.withValues(alpha: alpha),
+        );
+      },
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  SENSOR HEALTH INDICATOR — small dot showing overall sensor status
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// A compact, tappable sensor indicator that sits in the header.
+///
+/// Shows a small coloured dot with a subtle pulse:
+///   • GREEN  — health permissions granted, sensors active
+///   • AMBER  — health available but permissions not granted
+///   • GREY   — still loading / health not available
+///
+/// Tapping navigates to the full Sensors & State screen.
+class _SensorHealthIndicator extends ConsumerWidget {
+  const _SensorHealthIndicator();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+
+    final availableAsync = ref.watch(healthAvailableProvider);
+    final permAsync = ref.watch(healthPermissionStatusProvider);
+
+    // Derive status colour
+    final Color dotColor;
+    final String tooltip;
+
+    final available = availableAsync.valueOrNull;
+    final granted = permAsync.valueOrNull;
+
+    if (available == null || granted == null) {
+      // Still loading
+      dotColor = dark ? Colors.white24 : Colors.black26;
+      tooltip = 'Checking sensors…';
+    } else if (!available) {
+      dotColor = const Color(0xFF60758F); // fog grey
+      tooltip = 'Health platform unavailable';
+    } else if (!granted) {
+      dotColor = const Color(0xFFFFBD5A); // amber
+      tooltip = 'Health permissions needed';
+    } else {
+      dotColor = const Color(0xFF38C87E); // green
+      tooltip = 'Sensors active';
+    }
+
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: () => context.push('/sensors'),
+        behavior: HitTestBehavior.opaque,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+          child: _PulseDot(color: dotColor, needsAttention: granted == false),
+        ),
+      ),
+    );
+  }
+}
+
+/// A tiny dot that optionally pulses when attention is needed.
+class _PulseDot extends StatefulWidget {
+  const _PulseDot({required this.color, this.needsAttention = false});
+  final Color color;
+  final bool needsAttention;
+
+  @override
+  State<_PulseDot> createState() => _PulseDotState();
+}
+
+class _PulseDotState extends State<_PulseDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2000),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.needsAttention) _ctrl.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(_PulseDot old) {
+    super.didUpdateWidget(old);
+    if (widget.needsAttention && !_ctrl.isAnimating) {
+      _ctrl.repeat(reverse: true);
+    } else if (!widget.needsAttention && _ctrl.isAnimating) {
+      _ctrl.stop();
+      _ctrl.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        final scale = widget.needsAttention ? 1.0 + _ctrl.value * 0.35 : 1.0;
+        final opacity = widget.needsAttention ? 0.5 + _ctrl.value * 0.5 : 1.0;
+
+        return Transform.scale(
+          scale: scale,
+          child: Container(
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: widget.color.withValues(alpha: opacity),
+              boxShadow: [
+                BoxShadow(
+                  color: widget.color.withValues(alpha: 0.35),
+                  blurRadius: 6,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

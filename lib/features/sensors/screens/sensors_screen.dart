@@ -335,6 +335,56 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen> {
     return 'Unknown';
   }
 
+  // ── Fix permissions ────────────────────────────────────────────────────────
+
+  /// Open app settings so the user can grant all missing permissions, then
+  /// re-probe sensors to refresh the UI.
+  Future<void> _fixAllPermissions() async {
+    // First try requesting permissions directly
+    final health = ref.read(healthServiceProvider);
+    await health.requestAuthorization();
+    await [
+      Permission.location,
+      Permission.activityRecognition,
+      Permission.sensors,
+      Permission.calendarFullAccess,
+      Permission.notification,
+    ].request();
+    // If anything is still permanently denied, open system settings
+    await openAppSettings();
+    // Re-probe after returning from settings
+    if (mounted) {
+      ref.invalidate(healthPermissionStatusProvider);
+      await _probe();
+    }
+  }
+
+  /// Fix permissions for a specific sensor group.
+  Future<void> _fixGroupPermission(_SensorGroup group) async {
+    switch (group.title) {
+      case 'Health':
+        final health = ref.read(healthServiceProvider);
+        await health.requestAuthorization();
+        // Also try opening Health Connect / Apple Health settings
+        await health.openHealthConnectApp();
+      case 'Location (GPS)':
+        final status = await Permission.location.request();
+        if (status.isPermanentlyDenied) await openAppSettings();
+      case 'Calendar':
+        final status = await Permission.calendarFullAccess.request();
+        if (status.isPermanentlyDenied) await openAppSettings();
+      case 'Permissions':
+        await _fixAllPermissions();
+        return; // _fixAllPermissions already re-probes
+      default:
+        await openAppSettings();
+    }
+    if (mounted) {
+      ref.invalidate(healthPermissionStatusProvider);
+      await _probe();
+    }
+  }
+
   // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
@@ -359,11 +409,26 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen> {
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _probe,
-              child: ListView.builder(
+              child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                itemCount: _groups.length,
-                itemBuilder: (context, index) =>
-                    _SensorGroupCard(group: _groups[index], dark: dark),
+                children: [
+                  // ── Fix All Permissions banner ──
+                  if (_groups.any((g) => g.hasDenied))
+                    _FixAllPermissionsBanner(
+                      dark: dark,
+                      onFix: _fixAllPermissions,
+                    ),
+                  // ── Sensor groups ──
+                  ..._groups.map(
+                    (g) => _SensorGroupCard(
+                      group: g,
+                      dark: dark,
+                      onFixPermission: g.hasDenied
+                          ? () => _fixGroupPermission(g)
+                          : null,
+                    ),
+                  ),
+                ],
               ),
             ),
     );
@@ -415,6 +480,9 @@ class _SensorGroup {
     }
     return _SensorState.unavailable;
   }
+
+  /// Whether any item in this group has denied permissions.
+  bool get hasDenied => items.any((i) => i.state == _SensorState.denied);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -422,9 +490,14 @@ class _SensorGroup {
 // ═════════════════════════════════════════════════════════════════════════════
 
 class _SensorGroupCard extends StatelessWidget {
-  const _SensorGroupCard({required this.group, required this.dark});
+  const _SensorGroupCard({
+    required this.group,
+    required this.dark,
+    this.onFixPermission,
+  });
   final _SensorGroup group;
   final bool dark;
+  final VoidCallback? onFixPermission;
 
   @override
   Widget build(BuildContext context) {
@@ -465,6 +538,32 @@ class _SensorGroupCard extends StatelessWidget {
             const SizedBox(height: 14),
             // ── items ───────────────────────────────────────────────────
             ...group.items.map((item) => _SensorRow(item: item, dark: dark)),
+            // ── fix permission button ────────────────────────────────────
+            if (onFixPermission != null) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: onFixPermission,
+                  icon: const Icon(Icons.build_rounded, size: 16),
+                  label: Text(
+                    'Fix permissions',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFFFBD5A),
+                    side: const BorderSide(color: Color(0xFFFFBD5A), width: 1),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -574,5 +673,91 @@ String _stateLabel(_SensorState s) {
       return 'Unavailable';
     case _SensorState.error:
       return 'Error';
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  FIX ALL PERMISSIONS BANNER — prominent CTA at top of sensor list
+// ═════════════════════════════════════════════════════════════════════════════
+
+class _FixAllPermissionsBanner extends StatelessWidget {
+  const _FixAllPermissionsBanner({required this.dark, required this.onFix});
+  final bool dark;
+  final VoidCallback onFix;
+
+  @override
+  Widget build(BuildContext context) {
+    const accent = Color(0xFFFFBD5A);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: dark
+              ? [const Color(0xFF2A2210), const Color(0xFF1E1A10)]
+              : [const Color(0xFFFFF8E8), const Color(0xFFFFF3D6)],
+        ),
+        border: Border.all(color: accent.withValues(alpha: dark ? 0.25 : 0.30)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.shield_rounded, color: accent, size: 24),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Some permissions are missing',
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: dark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Grant access so your body story is complete',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: dark ? Colors.white54 : Colors.black45,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton(
+            onPressed: onFix,
+            style: FilledButton.styleFrom(
+              backgroundColor: accent,
+              foregroundColor: Colors.black87,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: Text(
+              'Fix all',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

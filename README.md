@@ -185,6 +185,7 @@ lib/
 │   │   ├── capture_entry     #   CaptureEntry + health/env/location sub-models
 │   │   ├── capture_ai_metadata  # AI-derived tags, themes, energy level per capture
 │   │   ├── ai_models         #   ChatMessage, request/response DTOs
+│   │   ├── ai_provider_config  # Provider presets & config model
 │   │   └── background_capture_config
 │   ├── router/               # GoRouter (3-tab shell + standalone routes)
 │   ├── services/             # All business logic
@@ -192,7 +193,8 @@ lib/
 │   │   ├── body_blog_service #   Smart-refresh orchestrator
 │   │   ├── journal_ai_service  # Prompt → AI → JournalAiResult
 │   │   ├── capture_metadata_service  # Per-capture background AI metadata
-│   │   ├── ai_service        #   HTTP client for ai.governor-hq.com
+│   │   ├── ai_service        #   HTTP client for any OpenAI-compatible endpoint
+│   │   ├── ai_config_service #   Persist & manage active AI provider
 │   │   ├── local_db_service  #   SQLite CRUD (schema v9)
 │   │   ├── capture_service   #   Multi-source data → CaptureEntry
 │   │   ├── background_capture_service  # WorkManager scheduler
@@ -217,6 +219,7 @@ lib/
 │   ├── shell/                # AppShell (3-tab nav) + DebugScreen
 │   ├── environment/          # Detailed environment view
 │   ├── shared/               # Reusable widgets
+│   ├── ai_settings/          # Bring-your-own-AI provider settings
 │   └── …                     # health, location, calendar, ai_test, permissions
 └── main.dart                 # App entry point
 ```
@@ -265,7 +268,7 @@ getTodayEntry()                       ← called on every Journal visit
 
 ### AI Details
 
-- **Endpoint:** `POST ai.governor-hq.com`
+- **Endpoint:** Default `POST ai.governor-hq.com`, or any user-configured provider (see **Bring Your Own AI** below).
 - **System prompt:** First-person voice — "the body speaking to its person." Warm, poetic, data-grounded. Never clinical, never medical advice.
 - **Context window:** 7-day rolling history fed into every prompt (`ContextWindowService`).
 - **Fallback:** On timeout (45 s) or parse error, the local template entry is returned unchanged.
@@ -286,6 +289,30 @@ default                                           →  calm
 
 Will be replaced by a classifier or LLM prompt once sufficient labelled data exists.
 
+### Bring Your Own AI
+
+By default BodyPress uses its built-in cloud gateway (`ai.governor-hq.com`) — no API key needed. Users can switch to any OpenAI-compatible provider from **More → AI Services**:
+
+| Provider                       | Base URL                     | Notes                                                                       |
+| ------------------------------ | ---------------------------- | --------------------------------------------------------------------------- |
+| **BodyPress Cloud** (default)  | `ai.governor-hq.com`         | Built-in, zero config                                                       |
+| **OpenAI**                     | `api.openai.com`             | GPT-4o, GPT-4o-mini, o1, o3-mini                                            |
+| **OpenRouter** ★               | `openrouter.ai/api`          | **300+ models behind one key** — OpenAI, Anthropic, Google, Meta, Mistral … |
+| **Groq**                       | `api.groq.com/openai`        | Ultra-fast Llama & Mixtral inference                                        |
+| **Mistral AI**                 | `api.mistral.ai`             | Mistral Small / Medium / Large                                              |
+| **DeepSeek**                   | `api.deepseek.com`           | DeepSeek V3 & R1 reasoning                                                  |
+| **Together AI**                | `api.together.xyz`           | Open-source models at scale                                                 |
+| **Fireworks AI**               | `api.fireworks.ai/inference` | Fast open-model inference                                                   |
+| **Perplexity**                 | `api.perplexity.ai`          | Search-augmented AI                                                         |
+| **Local (Ollama / LM Studio)** | `localhost:11434/v1`         | Private, on-device inference                                                |
+| **Custom**                     | user-defined                 | Any OpenAI-compatible endpoint                                              |
+
+All providers speak the same **OpenAI chat completions** protocol, so no adapter libraries are needed. **OpenRouter** is recommended when you want a single API key for every major model.
+
+- API keys are stored locally in SQLite — never sent to BodyPress Cloud.
+- Switching providers takes effect immediately — all AI services (`JournalAiService`, `CaptureMetadataService`, etc.) automatically route through the new endpoint via Riverpod's reactive graph.
+- A built-in **Test Connection** button validates the config before saving.
+
 ---
 
 ## Screens
@@ -298,7 +325,8 @@ Will be replaced by a classifier or LLM prompt once sufficient labelled data exi
 | 4   | **Patterns**       | `/patterns` (Tab 1) | Energy distribution, top themes, keyword tags, notable signals, recent moments timeline.                                                                                                                                                                                                                                                              |
 | 5   | **Capture**        | `/capture` (Tab 2)  | Manual capture with toggleable data sources. **BLE HR chip** opens a device scanner; once connected, a live ECG-style waveform slides in. BPM samples + RR intervals are recorded continuously for the full session; RMSSD / SDNN are computed at shutter press and the full `BleHrSession` is stored with the capture and included in the AI prompt. |
 | 6   | **Environment**    | `/environment`      | Expanded environmental data view.                                                                                                                                                                                                                                                                                                                     |
-| 7   | **Debug**          | `/debug`            | Raw sensor readouts — health metrics, GPS, ambient data, calendar events.                                                                                                                                                                                                                                                                             |
+| 7   | **AI Services**    | `/ai-settings`      | Choose AI provider, enter API key, set model, test connection. Supports 11 providers including local inference.                                                                                                                                                                                                                                       |
+| 8   | **Debug**          | `/debug`            | Raw sensor readouts — health metrics, GPS, ambient data, calendar events.                                                                                                                                                                                                                                                                             |
 
 ---
 
@@ -407,6 +435,7 @@ These are enforced by `CODING_PRINCIPLES.md`.
 - [x] Real-time HRV from BLE RR intervals — RMSSD, SDNN, mean-RR computed at capture time (`BleHrvMetrics`)
 - [x] Full `BleHrSession` (samples + RR + HRV) stored per capture in SQLite (schema v9)
 - [x] BLE HR narrative fed to AI — BPM arc + autonomic tone hint (`hrvContext`, `hrArc`) in `CaptureAiMetadata`
+- [x] Bring Your Own AI — plug any OpenAI-compatible provider (OpenAI, OpenRouter, Groq, Mistral, DeepSeek, Together, Fireworks, Perplexity, Ollama, custom)
 
 ### Next — BLE Peripherals
 
