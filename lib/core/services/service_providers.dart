@@ -132,7 +132,7 @@ final bodyBlogServiceProvider = Provider<BodyBlogService>((ref) {
 /// Invalidate this provider after a permission change to force a refresh:
 ///   ref.invalidate(healthPermissionStatusProvider);
 final healthPermissionStatusProvider = FutureProvider<bool>((ref) async {
-  return ref.read(healthServiceProvider).hasPermissions();
+  return ref.read(healthServiceProvider).hasPermissionsProbe();
 });
 
 /// A [FutureProvider] that resolves to whether the health platform is available

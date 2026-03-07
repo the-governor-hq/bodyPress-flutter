@@ -7,12 +7,28 @@ import 'package:permission_handler/permission_handler.dart';
 class HealthService {
   final Health _health = Health();
 
-  // Health data types we want to access
+  // Health data types we want to access (full list used for data reads)
   static final List<HealthDataType> types = [
     HealthDataType.STEPS,
     HealthDataType.HEART_RATE,
     HealthDataType.RESTING_HEART_RATE,
     HealthDataType.HEART_RATE_VARIABILITY_SDNN,
+    HealthDataType.ACTIVE_ENERGY_BURNED,
+    HealthDataType.DISTANCE_DELTA,
+    HealthDataType.SLEEP_ASLEEP,
+    HealthDataType.WORKOUT,
+  ];
+
+  /// Subset used for permission checks.
+  ///
+  /// HEART_RATE_VARIABILITY_SDNN is absent from Health Connect on many
+  /// Android devices.  Including it in [hasPermissions] causes the SDK to
+  /// return `null` (indeterminate) for the whole batch, which our code then
+  /// interprets as "not granted" — so onboarding is shown on every launch.
+  static final List<HealthDataType> _permissionCheckTypes = [
+    HealthDataType.STEPS,
+    HealthDataType.HEART_RATE,
+    HealthDataType.RESTING_HEART_RATE,
     HealthDataType.ACTIVE_ENERGY_BURNED,
     HealthDataType.DISTANCE_DELTA,
     HealthDataType.SLEEP_ASLEEP,
@@ -37,10 +53,31 @@ class HealthService {
   // Check if authorization has been granted
   Future<bool> hasPermissions() async {
     try {
-      final permissions = await _health.hasPermissions(types);
+      final permissions = await _health.hasPermissions(_permissionCheckTypes);
       return permissions ?? false;
     } catch (e) {
       debugPrint('Error checking health permissions: $e');
+      return false;
+    }
+  }
+
+  /// On Android, Health Connect does not support querying permission status
+  /// without attempting a real read — [hasPermissions] will return null (→ false)
+  /// even when access is fully granted.  This probe performs a minimal 1-day
+  /// read for STEPS only; a successful call (even returning 0 data points)
+  /// means Health Connect access has been granted.
+  Future<bool> hasPermissionsProbe() async {
+    if (!Platform.isAndroid) return hasPermissions();
+    try {
+      final now = DateTime.now();
+      await _health.getHealthDataFromTypes(
+        types: [HealthDataType.STEPS],
+        startTime: now.subtract(const Duration(days: 1)),
+        endTime: now,
+      );
+      return true;
+    } catch (e) {
+      debugPrint('[HealthService] Permission probe failed: $e');
       return false;
     }
   }

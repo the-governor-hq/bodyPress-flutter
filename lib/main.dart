@@ -44,8 +44,8 @@ void main() async {
     final criticalPerms = await permService
         .areCriticalPermissionsGranted()
         .timeout(const Duration(seconds: 3), onTimeout: () => false);
-    final healthPerms = await healthService.hasPermissions().timeout(
-      const Duration(seconds: 3),
+    final healthPerms = await healthService.hasPermissionsProbe().timeout(
+      const Duration(seconds: 5),
       onTimeout: () => false,
     );
     skipOnboarding = criticalPerms && healthPerms;

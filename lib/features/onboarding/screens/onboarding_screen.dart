@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/services/service_providers.dart';
 
@@ -72,8 +73,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
     _awaitingHealthConnect = false;
     setState(() => _busy = true);
     try {
-      final granted = await _healthService.hasPermissions().timeout(
-        const Duration(seconds: 5),
+      final granted = await _healthService.hasPermissionsProbe().timeout(
+        const Duration(seconds: 8),
         onTimeout: () => false,
       );
       if (!mounted) return;
@@ -109,6 +110,43 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
     if (mounted) context.go('/journal');
   }
 
+  /// When navigating to a permission step, silently check if the permission
+  /// is already granted and advance automatically.  This handles:
+  ///  - Re-entries after the user partially completed onboarding
+  ///  - Cases where the OS grants a permission implicitly
+  Future<void> _autoAdvanceIfAlreadyGranted(int page) async {
+    // Avoid interrupting an in-progress action.
+    if (_busy) return;
+
+    switch (page) {
+      case 1: // Location
+        final locGranted = (await Permission.location.status.timeout(
+          const Duration(seconds: 3),
+          onTimeout: () => PermissionStatus.denied,
+        )).isGranted;
+        if (locGranted && mounted) _next();
+
+      case 2: // Health
+        final granted = await _healthService.hasPermissionsProbe().timeout(
+          const Duration(seconds: 8),
+          onTimeout: () => false,
+        );
+        if (!mounted) return;
+        if (granted) {
+          // Clear phase-2 flag in case it was set by a previous attempt.
+          setState(() => _healthPhase2 = false);
+          _next();
+        }
+
+      case 3: // Calendar
+        final granted = await _permissionService
+            .isCalendarPermissionGranted()
+            .timeout(const Duration(seconds: 3), onTimeout: () => false);
+        if (granted && mounted) _next();
+    }
+    // Pages 0 (welcome), 4 (notifications), 5 (complete) always display.
+  }
+
   // ── permission helpers ────────────────────────────────────────
 
   Future<void> _requestLocation() async {
@@ -141,8 +179,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
     } catch (_) {}
 
     // Check whether health permissions are actually granted now.
-    final granted = await _healthService.hasPermissions().timeout(
-      const Duration(seconds: 5),
+    // Use probe (actual read attempt) — the only reliable method on Android.
+    final granted = await _healthService.hasPermissionsProbe().timeout(
+      const Duration(seconds: 8),
       onTimeout: () => false,
     );
 
@@ -231,7 +270,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
                 child: PageView(
                   controller: _pageCtrl,
                   physics: const NeverScrollableScrollPhysics(),
-                  onPageChanged: (i) => setState(() => _page = i),
+                  onPageChanged: (i) {
+                    setState(() => _page = i);
+                    _autoAdvanceIfAlreadyGranted(i);
+                  },
                   children: [
                     _WelcomePage(
                       onBegin: _next,

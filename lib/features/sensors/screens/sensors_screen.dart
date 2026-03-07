@@ -73,7 +73,7 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen> {
       );
 
       if (available) {
-        final hasPerms = await health.hasPermissions();
+        final hasPerms = await health.hasPermissionsProbe();
         items.add(
           _SensorItem(
             label: 'Permissions',
