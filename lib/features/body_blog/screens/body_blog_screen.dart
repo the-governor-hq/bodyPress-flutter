@@ -278,7 +278,6 @@ class _BodyBlogScreenState extends ConsumerState<BodyBlogScreen> {
   }
 
   Widget _emptyState(bool dark) {
-    final primary = Theme.of(context).colorScheme.primary;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
