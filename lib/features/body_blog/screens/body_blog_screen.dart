@@ -108,12 +108,14 @@ class _BodyBlogScreenState extends ConsumerState<BodyBlogScreen> {
       builder: (_) => const _ToneSelectorBottomSheet(),
     );
 
-    // User cancelled
+    // User cancelled (dismissed the sheet without picking a tone)
     if (!mounted || tone == null) return;
 
     setState(() => _refreshing = true);
     try {
-      final fresh = await _blogService.refreshTodayEntry(tone: tone);
+      // 'default' is a sentinel — the service expects null for the default tone.
+      final effectiveTone = tone == 'default' ? null : tone;
+      final fresh = await _blogService.refreshTodayEntry(tone: effectiveTone);
       if (mounted) {
         // Replace today's entry (index 0) with the refreshed version.
         setState(() {
@@ -3163,7 +3165,7 @@ class _ToneSelectorBottomSheet extends StatelessWidget {
                     icon: Icons.auto_awesome,
                     label: 'Default',
                     description: 'Warm, wise, intimate narrator',
-                    tone: null,
+                    tone: 'default',
                     dark: dark,
                   ),
                   const SizedBox(height: 12),
@@ -3229,7 +3231,7 @@ class _ToneOption extends StatelessWidget {
   final IconData icon;
   final String label;
   final String description;
-  final String? tone;
+  final String tone;
   final bool dark;
 
   @override
