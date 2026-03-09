@@ -1045,7 +1045,7 @@ List<_JournalContextItem> _buildJournalContextItems(BodySnapshot snapshot) {
   return items;
 }
 
-class _JournalHeroPanel extends StatelessWidget {
+class _JournalHeroPanel extends StatefulWidget {
   const _JournalHeroPanel({
     required this.headline,
     required this.previewText,
@@ -1069,13 +1069,47 @@ class _JournalHeroPanel extends StatelessWidget {
   final Widget? action;
 
   @override
+  State<_JournalHeroPanel> createState() => _JournalHeroPanelState();
+}
+
+class _JournalHeroPanelState extends State<_JournalHeroPanel>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _floatY;
+  late final Animation<double> _opacity;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
+    )..repeat(reverse: true);
+    // Gentle vertical float: -4 → +4 px
+    _floatY = Tween<double>(
+      begin: -4,
+      end: 4,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+    // Subtle pulse in opacity
+    _opacity = Tween<double>(
+      begin: 0.07,
+      end: 0.14,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).colorScheme.primary;
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(30),
         gradient: LinearGradient(
@@ -1104,103 +1138,111 @@ class _JournalHeroPanel extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              _JournalMetaPill(
-                icon: Icons.auto_stories_rounded,
-                text: dateLabel,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(30),
+        child: Stack(
+          children: [
+            // ── Atmospheric mood watermark ──
+            Positioned(
+              top: 18,
+              right: -10,
+              child: AnimatedBuilder(
+                animation: _ctrl,
+                builder: (context, child) => Transform.translate(
+                  offset: Offset(0, _floatY.value),
+                  child: Opacity(opacity: _opacity.value, child: child),
+                ),
+                child: Text(
+                  widget.moodEmoji,
+                  style: const TextStyle(fontSize: 110),
+                ),
               ),
-              _JournalMetaPill(icon: Icons.schedule_rounded, text: readTime),
-              badge,
-            ],
-          ),
-          const SizedBox(height: 18),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      headline,
-                      style: GoogleFonts.playfairDisplay(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w700,
-                        height: 1.15,
-                        color: dark ? Colors.white : const Color(0xFF111111),
+            ),
+            // ── Main content ──
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      _JournalMetaPill(
+                        icon: Icons.auto_stories_rounded,
+                        text: widget.dateLabel,
                       ),
+                      _JournalMetaPill(
+                        icon: Icons.schedule_rounded,
+                        text: widget.readTime,
+                      ),
+                      widget.badge,
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  // ── Mood label as a subtle inline chip ──
+                  Row(
+                    children: [
+                      Text(
+                        widget.moodEmoji,
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        widget.moodLabel,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.8,
+                          color: dark
+                              ? Colors.white.withValues(alpha: 0.50)
+                              : primary.withValues(alpha: 0.60),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    widget.headline,
+                    style: GoogleFonts.playfairDisplay(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w700,
+                      height: 1.15,
+                      color: dark ? Colors.white : const Color(0xFF111111),
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      previewText,
-                      style: GoogleFonts.inter(
-                        fontSize: 15,
-                        height: 1.7,
-                        fontWeight: FontWeight.w400,
-                        color: dark
-                            ? Colors.white.withValues(alpha: 0.74)
-                            : const Color(0xFF3E3B3B),
-                      ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    widget.previewText,
+                    style: GoogleFonts.inter(
+                      fontSize: 15,
+                      height: 1.7,
+                      fontWeight: FontWeight.w400,
+                      color: dark
+                          ? Colors.white.withValues(alpha: 0.74)
+                          : const Color(0xFF3E3B3B),
+                    ),
+                  ),
+                  if (widget.spotlightFacts.isNotEmpty) ...[
+                    const SizedBox(height: 22),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: widget.spotlightFacts
+                          .map((fact) => _JournalSpotlightCard(fact: fact))
+                          .toList(),
                     ),
                   ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              Container(
-                width: 74,
-                padding: const EdgeInsets.symmetric(
-                  vertical: 14,
-                  horizontal: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: (dark ? Colors.white : primary).withValues(
-                    alpha: dark ? 0.06 : 0.08,
-                  ),
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(
-                    color: primary.withValues(alpha: dark ? 0.18 : 0.12),
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    Text(moodEmoji, style: const TextStyle(fontSize: 30)),
-                    const SizedBox(height: 8),
-                    Text(
-                      moodLabel,
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        height: 1.35,
-                        color: dark
-                            ? Colors.white.withValues(alpha: 0.7)
-                            : primary.withValues(alpha: 0.75),
-                      ),
-                    ),
+                  if (widget.action != null) ...[
+                    const SizedBox(height: 22),
+                    widget.action!,
                   ],
-                ),
+                ],
               ),
-            ],
-          ),
-          if (spotlightFacts.isNotEmpty) ...[
-            const SizedBox(height: 22),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: spotlightFacts
-                  .map((fact) => _JournalSpotlightCard(fact: fact))
-                  .toList(),
             ),
           ],
-          if (action != null) ...[const SizedBox(height: 22), action!],
-        ],
+        ),
       ),
     );
   }
