@@ -30,8 +30,7 @@ class _BodyDialogueSheet extends ConsumerStatefulWidget {
   final BodyBlogEntry entry;
 
   @override
-  ConsumerState<_BodyDialogueSheet> createState() =>
-      _BodyDialogueSheetState();
+  ConsumerState<_BodyDialogueSheet> createState() => _BodyDialogueSheetState();
 }
 
 class _BodyDialogueSheetState extends ConsumerState<_BodyDialogueSheet> {
@@ -58,6 +57,11 @@ class _BodyDialogueSheetState extends ConsumerState<_BodyDialogueSheet> {
       ai: ref.read(aiServiceProvider),
     );
     _session = dialogueService.startSession(widget.entry);
+
+    // Auto-focus the text field so the keyboard opens when the sheet appears.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusNode.requestFocus();
+    });
   }
 
   @override
@@ -84,7 +88,9 @@ class _BodyDialogueSheetState extends ConsumerState<_BodyDialogueSheet> {
     try {
       await _session.send(text);
     } catch (e) {
-      setState(() => _error = 'Couldn\'t reach your body right now. Try again.');
+      setState(
+        () => _error = 'Couldn\'t reach your body right now. Try again.',
+      );
     } finally {
       if (mounted) {
         setState(() => _sending = false);
@@ -146,10 +152,7 @@ class _BodyDialogueSheetState extends ConsumerState<_BodyDialogueSheet> {
                       if (i == msgs.length && _sending) {
                         return const _TypingIndicator();
                       }
-                      return _MessageBubble(
-                        message: msgs[i],
-                        dark: dark,
-                      );
+                      return _MessageBubble(message: msgs[i], dark: dark);
                     },
                   ),
           ),
@@ -281,10 +284,7 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            moodEmoji,
-            style: const TextStyle(fontSize: 44),
-          ),
+          Text(moodEmoji, style: const TextStyle(fontSize: 44)),
           const SizedBox(height: 16),
           Text(
             'Your body is feeling $mood today',
@@ -380,15 +380,17 @@ class _MessageBubble extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
-        mainAxisAlignment:
-            _isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: _isUser
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!_isUser) ...[
             CircleAvatar(
               radius: 14,
-              backgroundColor:
-                  dark ? const Color(0xFF3A3A3C) : const Color(0xFFE5E5EA),
+              backgroundColor: dark
+                  ? const Color(0xFF3A3A3C)
+                  : const Color(0xFFE5E5EA),
               child: Text(
                 '✦',
                 style: TextStyle(
@@ -418,7 +420,9 @@ class _MessageBubble extends StatelessWidget {
                   height: 1.45,
                   color: _isUser
                       ? Colors.white
-                      : (dark ? Colors.white.withValues(alpha: 0.85) : Colors.black87),
+                      : (dark
+                            ? Colors.white.withValues(alpha: 0.85)
+                            : Colors.black87),
                 ),
               ),
             ),
@@ -469,8 +473,9 @@ class _TypingIndicatorState extends State<_TypingIndicator>
         children: [
           CircleAvatar(
             radius: 14,
-            backgroundColor:
-                dark ? const Color(0xFF3A3A3C) : const Color(0xFFE5E5EA),
+            backgroundColor: dark
+                ? const Color(0xFF3A3A3C)
+                : const Color(0xFFE5E5EA),
             child: Text(
               '✦',
               style: TextStyle(
@@ -561,8 +566,7 @@ class _InputBar extends StatelessWidget {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color:
-                    dark ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7),
+                color: dark ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7),
                 borderRadius: BorderRadius.circular(22),
               ),
               child: TextField(
@@ -584,8 +588,10 @@ class _InputBar extends StatelessWidget {
                     color: dark ? Colors.white24 : Colors.black26,
                   ),
                   border: InputBorder.none,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
                 ),
               ),
             ),
@@ -685,15 +691,12 @@ class _PulsingBodyIconState extends State<_PulsingBodyIcon>
           height: 36,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: dark
-                ? const Color(0xFF2C2C2E)
-                : const Color(0xFFE8E8ED),
+            color: dark ? const Color(0xFF2C2C2E) : const Color(0xFFE8E8ED),
             boxShadow: [
               BoxShadow(
-                color: (dark
-                        ? const Color(0xFF0A84FF)
-                        : const Color(0xFF007AFF))
-                    .withValues(alpha: glow),
+                color:
+                    (dark ? const Color(0xFF0A84FF) : const Color(0xFF007AFF))
+                        .withValues(alpha: glow),
                 blurRadius: 12,
                 spreadRadius: 1,
               ),
