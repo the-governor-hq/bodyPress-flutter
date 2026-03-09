@@ -71,12 +71,21 @@ class LocationService {
   /// Public read-only access to the cached GeoIP data (city, region, etc.).
   GeoIpLocation? get cachedGeoIp => _cachedGeoIp;
 
-  // Get current location — tries GPS first, falls back to GeoIP.
+  /// Whether the user has granted location permission (without requesting).
+  Future<bool> hasLocationPermission() async {
+    final permission = await Geolocator.checkPermission();
+    return permission == LocationPermission.whileInUse ||
+        permission == LocationPermission.always;
+  }
+
+  // Get current location — tries GPS first, falls back to GeoIP
+  // ONLY when location permission is not granted.
   Future<Position?> getCurrentLocation() async {
-    // Try GPS first
-    try {
-      final hasPermission = await _checkPermission();
-      if (hasPermission) {
+    final hasPermission = await _checkPermission();
+
+    if (hasPermission) {
+      // Permission granted — use GPS only, never GeoIP.
+      try {
         final gpsPosition = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.high,
@@ -84,17 +93,22 @@ class LocationService {
           ),
         ).timeout(const Duration(seconds: 8));
         return gpsPosition;
+      } catch (e) {
+        debugPrint(
+          'GPS location unavailable ($e) — no GeoIP fallback '
+          'because permission is granted',
+        );
+        return null;
       }
-    } catch (e) {
-      debugPrint('GPS location unavailable ($e) — trying GeoIP fallback');
     }
 
-    // Fallback: GeoIP
+    // Permission NOT granted — fall back to GeoIP.
     try {
       final geoIp = await getGeoIpLocation();
       if (geoIp != null) {
         debugPrint(
-          'Using GeoIP fallback: ${geoIp.city}, ${geoIp.region} '
+          'Using GeoIP fallback (no location permission): '
+          '${geoIp.city}, ${geoIp.region} '
           '(${geoIp.latitude}, ${geoIp.longitude})',
         );
         return geoIp.toPosition();

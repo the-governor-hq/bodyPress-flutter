@@ -45,8 +45,10 @@ class _EnvironmentScreenState extends State<EnvironmentScreen> {
         );
       }
 
-      // Fallback to GeoIP
-      data ??= await _ambientService.scanByGeoIp();
+      // Fallback to GeoIP only when location permission is not granted.
+      if (data == null && !await _locationService.hasLocationPermission()) {
+        data = await _ambientService.scanByGeoIp();
+      }
 
       if (mounted) {
         setState(() {
