@@ -2,7 +2,7 @@
 
 [![CI — Download Build APK](https://github.com/the-governor-hq/bodyPress-flutter/actions/workflows/ci.yml/badge.svg)](https://github.com/the-governor-hq/bodyPress-flutter/actions/workflows/ci.yml)
 ![Flutter](https://img.shields.io/badge/Flutter-3.9.2%2B-blue?logo=flutter)
-![Version](https://img.shields.io/badge/version-1.0.5-informational)
+![Version](https://img.shields.io/badge/version-1.0.20-informational)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 > Your body writes a journal every day — BodyPress reads it.
@@ -73,23 +73,24 @@ Under the hood the app treats the human body as an observable system: collect ob
 | **Nutrition Scanner**    | Scan any food barcode from the Capture screen. Open Food Facts returns Nutri-Score, NOVA group, and full macros. AI prompt includes the food data and generates a nutrition Context analysis correlating nutrition to HRV/energy patterns.                                                                                                                                                            |
 | **User Annotations**     | Free-text notes and mood emojis per day, persisted in SQLite alongside the AI-generated content.                                                                                                                                                                                                                                                                                                      |
 | **Onboarding**           | Step-by-step permission flow with per-permission explanations and privacy notes. Every step is skippable.                                                                                                                                                                                                                                                                                             |
+| **BCI Signal Analysis**  | Four visualisation modes on the Live Signal screen: time-domain waveforms, real-time FFT spectral analysis (spectrum / waterfall / EEG bands), neural-state decoding demo (5-state classifier with confidence ring), and signal quality monitoring demo (SNR, impedance, artifact detection). Switchable via a popup menu — works with real BLE hardware and demo mode.                               |
 | **Dark & Light Themes**  | Material 3 theming with system-mode detection.                                                                                                                                                                                                                                                                                                                                                        |
 
 ---
 
 ## Data Sources
 
-| Domain             | Sensor / API                        | What's read                                                                                              |
-| ------------------ | ----------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| **Movement**       | Health Connect / HealthKit          | Steps, distance, calories, workouts                                                                      |
-| **Cardiovascular** | Optical HR sensor (OS health store) | Average HR, resting HR, HRV (SDNN)                                                                       |
-| **Cardiovascular** | BLE HR strap (direct, 0x180D)       | Continuous BPM session + RR intervals → RMSSD / SDNN / mean-RR; full `BleHrSession` stored per capture   |
-| **Signal sources** | BLE plugin system (ADS1299, …)      | Multi-channel streaming from community hardware — see [CONTRIBUTING_SOURCES.md](CONTRIBUTING_SOURCES.md) |
-| **Sleep**          | Device sleep tracking               | Duration, phases                                                                                         |
-| **Environment**    | GPS → ambient-scan API              | Temperature, humidity, AQI, UV, pressure, wind, conditions                                               |
-| **Schedule**       | Device calendar (CalDAV)            | Today's events                                                                                           |
-| **Location**       | GPS (Geolocator)                    | Coordinates — ephemeral, never stored                                                                    |
-| **Nutrition**      | Barcode → Open Food Facts API v2    | Product name, Nutri-Score, NOVA group, macros per 100 g / per serving                                    |
+| Domain             | Sensor / API                        | What's read                                                                                                                                                       |
+| ------------------ | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Movement**       | Health Connect / HealthKit          | Steps, distance, calories, workouts                                                                                                                               |
+| **Cardiovascular** | Optical HR sensor (OS health store) | Average HR, resting HR, HRV (SDNN)                                                                                                                                |
+| **Cardiovascular** | BLE HR strap (direct, 0x180D)       | Continuous BPM session + RR intervals → RMSSD / SDNN / mean-RR; full `BleHrSession` stored per capture                                                            |
+| **Signal sources** | BLE plugin system (ADS1299, …)      | Multi-channel streaming from community hardware — 4 view modes (waveform, spectral, decoding, monitoring). See [CONTRIBUTING_SOURCES.md](CONTRIBUTING_SOURCES.md) |
+| **Sleep**          | Device sleep tracking               | Duration, phases                                                                                                                                                  |
+| **Environment**    | GPS → ambient-scan API              | Temperature, humidity, AQI, UV, pressure, wind, conditions                                                                                                        |
+| **Schedule**       | Device calendar (CalDAV)            | Today's events                                                                                                                                                    |
+| **Location**       | GPS (Geolocator)                    | Coordinates — ephemeral, never stored                                                                                                                             |
+| **Nutrition**      | Barcode → Open Food Facts API v2    | Product name, Nutri-Score, NOVA group, macros per 100 g / per serving                                                                                             |
 
 > **Privacy:** GPS is read once to fetch environmental data, then discarded. No location history is recorded or transmitted. Health data is read-only — the app never writes to HealthKit or Health Connect.
 
@@ -221,7 +222,10 @@ lib/
 │   │   └── permission_service    # Permission orchestration
 │   ├── widgets/              # Shared low-level widgets
 │   │   ├── live_hr_waveform  #   60 fps ECG-style PQRST waveform (BLE HR)
-│   │   └── live_signal_chart #   Multi-channel real-time signal chart (any source)
+│   │   ├── live_signal_chart #   Multi-channel real-time signal chart (any source)
+│   │   ├── spectral_analysis_chart  # 3-view FFT spectrum / waterfall / band power
+│   │   ├── bci_decoding_view #   Demo neural state classifier
+│   │   └── bci_monitoring_view  # Demo signal quality dashboard
 │   └── theme/                # Material 3 (light + dark)
 ├── features/
 │   ├── onboarding/           # Step-by-step permission flow
@@ -333,18 +337,18 @@ All providers speak the same **OpenAI chat completions** protocol, so no adapter
 
 ## Screens
 
-| #   | Screen             | Route                | Description                                                                                                                                                                                                                                                                                    |
-| --- | ------------------ | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Onboarding**     | `/onboarding`        | Permission flow — location, health, calendar. Every step skippable.                                                                                                                                                                                                                            |
-| 2   | **Journal**        | `/journal` (Tab 0)   | Paginated daily blog. Swipe between days. Pull-to-refresh + "Refresh day" on today's card.                                                                                                                                                                                                     |
-| 3   | **Journal Detail** | —                    | Full narrative: Sleep, Movement, Heart, Environment, Agenda. AI regeneration & mood/note editor.                                                                                                                                                                                               |
-| 4   | **Patterns**       | `/patterns` (Tab 1)  | Energy distribution, top themes, keyword tags, notable signals, recent moments timeline.                                                                                                                                                                                                       |
-| 5   | **Capture**        | `/capture` (Tab 2)   | Manual capture with toggleable data sources. **BLE HR chip** opens a device scanner; once connected, a live ECG-style waveform slides in. **Scan Food chip** opens a barcode scanner; scanned products show Nutri-Score, macros, and feed into the AI prompt for nutrition-health correlation. |
-| 6   | **Environment**    | `/environment`       | Expanded environmental data view.                                                                                                                                                                                                                                                              |
-| 7   | **AI Services**    | `/ai-settings`       | Choose AI provider, enter API key, set model, test connection. Supports 11 providers including local inference.                                                                                                                                                                                |
-| 8   | **Debug**          | `/debug`             | Raw sensor readouts — health metrics, GPS, ambient data, calendar events.                                                                                                                                                                                                                      |
-| 9   | **Source Browser** | `/sources`           | Browse all registered BLE signal sources (ADS1299, community boards). Each card shows channel count, sample rate, and hardware name.                                                                                                                                                           |
-| 10  | **Live Signal**    | `/sources/:sourceId` | Full-screen multi-channel waveform: scan → pick device → connect → stream. Channel toggle chips, solo mode, recording.                                                                                                                                                                         |
+| #   | Screen             | Route                | Description                                                                                                                                                                                                                                                                                                                      |
+| --- | ------------------ | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Onboarding**     | `/onboarding`        | Permission flow — location, health, calendar. Every step skippable.                                                                                                                                                                                                                                                              |
+| 2   | **Journal**        | `/journal` (Tab 0)   | Paginated daily blog. Swipe between days. Pull-to-refresh + "Refresh day" on today's card.                                                                                                                                                                                                                                       |
+| 3   | **Journal Detail** | —                    | Full narrative: Sleep, Movement, Heart, Environment, Agenda. AI regeneration & mood/note editor.                                                                                                                                                                                                                                 |
+| 4   | **Patterns**       | `/patterns` (Tab 1)  | Energy distribution, top themes, keyword tags, notable signals, recent moments timeline.                                                                                                                                                                                                                                         |
+| 5   | **Capture**        | `/capture` (Tab 2)   | Manual capture with toggleable data sources. **BLE HR chip** opens a device scanner; once connected, a live ECG-style waveform slides in. **Scan Food chip** opens a barcode scanner; scanned products show Nutri-Score, macros, and feed into the AI prompt for nutrition-health correlation.                                   |
+| 6   | **Environment**    | `/environment`       | Expanded environmental data view.                                                                                                                                                                                                                                                                                                |
+| 7   | **AI Services**    | `/ai-settings`       | Choose AI provider, enter API key, set model, test connection. Supports 11 providers including local inference.                                                                                                                                                                                                                  |
+| 8   | **Debug**          | `/debug`             | Raw sensor readouts — health metrics, GPS, ambient data, calendar events.                                                                                                                                                                                                                                                        |
+| 9   | **Source Browser** | `/sources`           | Browse all registered BLE signal sources (ADS1299, community boards). Each card shows channel count, sample rate, and hardware name.                                                                                                                                                                                             |
+| 10  | **Live Signal**    | `/sources/:sourceId` | Full-screen multi-channel signal monitor: scan → pick device → connect → stream. Four view modes via popup menu — **Waveform** (time-domain), **Spectral** (FFT spectrum/waterfall/bands), **Decoding** (demo neural state classifier), **Monitor** (demo signal quality dashboard). Channel toggle chips, solo mode, recording. |
 
 ---
 
@@ -463,6 +467,11 @@ These are enforced by `CODING_PRINCIPLES.md`.
 - [x] Source Browser + Live Signal screens (`/sources`, `/sources/:sourceId`)
 - [x] `SignalSession` model with JSON persistence in `CaptureEntry` (schema v11)
 - [x] Community source contribution guide — [CONTRIBUTING_SOURCES.md](CONTRIBUTING_SOURCES.md)
+- [x] Pure-Dart FFT engine (`FftEngine`) — Cooley-Tukey radix-2, Hanning window, PSD, EEG band extraction (δ/θ/α/β/γ)
+- [x] Spectral analysis chart — live frequency spectrum, waterfall spectrogram, animated EEG band power meters
+- [x] BCI decoding demo — 5-state neural classifier (Focus/Relax/Motor-L/Motor-R/Meditate) with confidence ring and timeline
+- [x] BCI monitoring demo — per-channel SNR, impedance, artifact detection, data-readiness gauge
+- [x] 4-mode visualisation system (`SignalViewMode`) with animated popup menu switcher
 
 ### Next — BLE Peripherals
 
@@ -478,7 +487,7 @@ These are enforced by `CODING_PRINCIPLES.md`.
 
 ### Future
 
-- [ ] On-device ML for mood/state classification
+- [ ] On-device ML for mood/state classification (upgrade BCI decoding from demo heuristics to real inference)
 - [ ] Multi-user household awareness (BLE presence + individual profiles)
 - [ ] Wearable companion (Wear OS / watchOS)
 - [ ] Export to structured health records (FHIR-compatible)

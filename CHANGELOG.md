@@ -11,8 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Real-time Spectral Analysis (BCI)**: Pure-Dart Cooley-Tukey radix-2 FFT engine (`FftEngine`) with Hanning window, PSD normalisation, and EEG frequency band extraction (Delta δ 0.5–4 Hz, Theta θ 4–8, Alpha α 8–13, Beta β 13–30, Gamma γ 30–100)
 - **Bioluminescent Spectrum widget** (`SpectralAnalysisChart`) — three views: live frequency spectrum with triple-pass glow rendering, scrolling waterfall spectrogram with 7-stop bioluminescent gradient heatmap, and animated EEG band power meters
-- One-tap toggle between time-domain waveforms and spectral analysis in the live signal screen AppBar (works in both real BLE streaming and demo mode)
-- `AnimatedSwitcher` crossfade between `LiveSignalChart` and `SpectralAnalysisChart` with shared signal stream
+- **BCI Decoding view** (`BciDecodingView`) — demo neural state classifier: 5-state model (Focus, Relax, Motor-L, Motor-R, Meditate), animated confidence ring, probability bars per state, scrolling classification timeline ribbon. Pseudo-classification derived from signal RMS/variance
+- **BCI Monitoring view** (`BciMonitoringView`) — demo signal quality dashboard: per-channel SNR (dB), RMS amplitude (µV), simulated impedance (kΩ), artifact detection (clean / blink / muscle / movement), overall data-readiness score gauge, artifact timeline painter
+- **4-mode signal view system** — `SignalViewMode` enum (`Waveform`, `Spectral`, `Decoding`, `Monitor`) replaces the old spectral toggle; `PopupMenuButton` mode picker in the AppBar with per-mode icons, colours, and "DEMO" badge on decoding/monitoring; `AnimatedSwitcher` crossfade between all four views
 - Dominant frequency badge, pulsing aurora icon, per-channel selector, smoothed PSD bars (EMA α=0.3), 75% FFT overlap for smooth updates
 - Comprehensive FFT test suite (12 tests): sinusoid peak detection, band power extraction, Parseval energy conservation, white noise flatness, dB normalisation, frequency axis validation
 

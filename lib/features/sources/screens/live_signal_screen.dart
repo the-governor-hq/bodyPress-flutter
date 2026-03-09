@@ -9,8 +9,27 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/services/ble_source_provider.dart';
 import '../../../core/services/service_providers.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/bci_decoding_view.dart';
+import '../../../core/widgets/bci_monitoring_view.dart';
 import '../../../core/widgets/live_signal_chart.dart';
 import '../../../core/widgets/spectral_analysis_chart.dart';
+
+/// Signal visualisation modes available during streaming.
+enum SignalViewMode {
+  timeDomain('Waveform', Icons.timeline_rounded, AppTheme.glow),
+  spectral('Spectral', Icons.graphic_eq_rounded, AppTheme.aurora),
+  decoding('Decoding', Icons.psychology_rounded, Color(0xFFFF9800)),
+  monitoring('Monitor', Icons.monitor_heart_rounded, AppTheme.starlight);
+
+  final String label;
+  final IconData icon;
+  final Color color;
+
+  const SignalViewMode(this.label, this.icon, this.color);
+
+  SignalViewMode get next =>
+      SignalViewMode.values[(index + 1) % SignalViewMode.values.length];
+}
 
 /// Full-screen live signal monitor for a specific BLE source.
 ///
@@ -44,8 +63,8 @@ class _LiveSignalScreenState extends ConsumerState<LiveSignalScreen> {
   StreamSubscription<SignalSample>? _recordSub;
   bool _isRecording = false;
 
-  // Spectral analysis toggle.
-  bool _showSpectral = false;
+  // Active visualisation mode.
+  SignalViewMode _viewMode = SignalViewMode.timeDomain;
 
   // Demo mode — synthetic signal without real hardware.
   bool _isDemoMode = false;
@@ -244,18 +263,7 @@ class _LiveSignalScreenState extends ConsumerState<LiveSignalScreen> {
                 ),
               ),
             ),
-          if (_state == BleSourceState.streaming)
-            IconButton(
-              icon: Icon(
-                _showSpectral
-                    ? Icons.timeline_rounded
-                    : Icons.graphic_eq_rounded,
-                color: _showSpectral ? AppTheme.glow : AppTheme.aurora,
-                size: 20,
-              ),
-              tooltip: _showSpectral ? 'Time domain' : 'Spectral analysis',
-              onPressed: () => setState(() => _showSpectral = !_showSpectral),
-            ),
+          if (_state == BleSourceState.streaming) _buildModeSwitcher(),
           if (_state == BleSourceState.streaming && !_isDemoMode)
             IconButton(
               icon: Icon(
@@ -493,48 +501,126 @@ class _LiveSignalScreenState extends ConsumerState<LiveSignalScreen> {
               ),
             ),
 
-          // Live chart / Spectral analysis — animated crossfade.
+          // Active visualisation — animated crossfade between modes.
           Expanded(
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 400),
               switchInCurve: Curves.easeOutCubic,
               switchOutCurve: Curves.easeInCubic,
-              child: _showSpectral
-                  ? SpectralAnalysisChart(
-                      key: const ValueKey('spectral'),
-                      signalStream: _isDemoMode
-                          ? _demoSignalController.stream
-                          : _service.signalStream,
-                      channelDescriptors: _provider!.channelDescriptors,
-                      sampleRateHz: _provider!.sampleRateHz,
-                      deviceName: _isDemoMode
-                          ? 'Demo'
-                          : _service.connectedDevice?.platformName,
-                      sourceName: _isDemoMode
-                          ? '${_provider!.displayName} (Demo)'
-                          : _provider!.displayName,
-                      onSwitchToTimeDomain: () =>
-                          setState(() => _showSpectral = false),
-                    )
-                  : LiveSignalChart(
-                      key: const ValueKey('timedomain'),
-                      signalStream: _isDemoMode
-                          ? _demoSignalController.stream
-                          : _service.signalStream,
-                      channelDescriptors: _provider!.channelDescriptors,
-                      deviceName: _isDemoMode
-                          ? 'Demo'
-                          : _service.connectedDevice?.platformName,
-                      sourceName: _isDemoMode
-                          ? '${_provider!.displayName} (Demo)'
-                          : _provider!.displayName,
-                      onDisconnect: _isDemoMode ? _stopDemo : _disconnect,
-                    ),
+              child: _buildActiveView(),
             ),
           ),
         ],
       ),
     );
+  }
+
+  // ── Mode switcher (AppBar action) ───────────────────────────────────
+
+  Widget _buildModeSwitcher() {
+    return PopupMenuButton<SignalViewMode>(
+      icon: Icon(_viewMode.icon, color: _viewMode.color, size: 20),
+      tooltip: 'Switch view mode',
+      color: AppTheme.deepSea,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      onSelected: (mode) => setState(() => _viewMode = mode),
+      itemBuilder: (_) => SignalViewMode.values.map((mode) {
+        final isActive = mode == _viewMode;
+        return PopupMenuItem<SignalViewMode>(
+          value: mode,
+          child: Row(
+            children: [
+              Icon(
+                mode.icon,
+                color: isActive ? mode.color : AppTheme.fog,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                mode.label,
+                style: GoogleFonts.dmSans(
+                  fontSize: 13,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
+                  color: isActive ? mode.color : AppTheme.moonbeam,
+                ),
+              ),
+              if (mode == SignalViewMode.decoding ||
+                  mode == SignalViewMode.monitoring) ...[
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 1,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.aurora.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    'DEMO',
+                    style: GoogleFonts.robotoMono(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.aurora,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // ── Active view builder ───────────────────────────────────────────────
+
+  Widget _buildActiveView() {
+    final stream = _isDemoMode
+        ? _demoSignalController.stream
+        : _service.signalStream;
+    final descriptors = _provider!.channelDescriptors;
+    final deviceName = _isDemoMode
+        ? 'Demo'
+        : _service.connectedDevice?.platformName;
+    final sourceName = _isDemoMode
+        ? '${_provider!.displayName} (Demo)'
+        : _provider!.displayName;
+
+    switch (_viewMode) {
+      case SignalViewMode.timeDomain:
+        return LiveSignalChart(
+          key: const ValueKey('timedomain'),
+          signalStream: stream,
+          channelDescriptors: descriptors,
+          deviceName: deviceName,
+          sourceName: sourceName,
+          onDisconnect: _isDemoMode ? _stopDemo : _disconnect,
+        );
+      case SignalViewMode.spectral:
+        return SpectralAnalysisChart(
+          key: const ValueKey('spectral'),
+          signalStream: stream,
+          channelDescriptors: descriptors,
+          sampleRateHz: _provider!.sampleRateHz,
+          deviceName: deviceName,
+          sourceName: sourceName,
+          onSwitchToTimeDomain: () =>
+              setState(() => _viewMode = SignalViewMode.timeDomain),
+        );
+      case SignalViewMode.decoding:
+        return BciDecodingView(
+          key: const ValueKey('decoding'),
+          signalStream: stream,
+          channelDescriptors: descriptors,
+        );
+      case SignalViewMode.monitoring:
+        return BciMonitoringView(
+          key: const ValueKey('monitoring'),
+          signalStream: stream,
+          channelDescriptors: descriptors,
+        );
+    }
   }
 
   // ── Error state ───────────────────────────────────────────────────────
