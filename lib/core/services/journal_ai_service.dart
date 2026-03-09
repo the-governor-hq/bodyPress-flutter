@@ -42,7 +42,7 @@ class JournalAiResult {
       summary: json['summary'] as String? ?? '',
       fullBody: json['full_body'] as String? ?? '',
       mood: _validMoods.contains(rawMood) ? rawMood : 'calm',
-      moodEmoji: json['mood_emoji'] as String? ?? '🌿',
+      moodEmoji: json['mood_emoji'] as String? ?? '🫀',
       tags: (json['tags'] as List<dynamic>? ?? const [])
           .map((t) => t.toString())
           .toList(),
@@ -391,7 +391,7 @@ Rules:
 - summary: 2–3 sentences. The emotional + physical essence of the day.
 - full_body: 200–350 words. 3–5 labelled sections. Only include sections for data categories actually present above (e.g. skip — Sleep —, — Heart — if no health data was provided). Body speaks warmly to its person.
 - mood: exactly one of: energised, tired, active, cautious, rested, quiet, calm
-- mood_emoji: single emoji matching mood
+- mood_emoji: single body-centric emoji matching mood. MUST represent the human body or physical state (e.g. ⚡ 🏃 😴 🧘 🫁 💤 🫀 💪 🧎 🤸 🏋️ 🫂 🦵 💆). NEVER use weather emojis (☀️ 🌤️ 🌧️ 🌫️ 🌙 🌿 etc.) — the mood describes the body, not the sky.
 - tags: 4–7 short labels derived ONLY from data actually provided above (e.g. "Clear skies", "18°C", "3 events")
 
 CRITICAL: NEVER invent, estimate, or hallucinate numbers. If no health data (steps, sleep, heart rate, calories) appears above, do NOT mention any health metrics in headline, summary, full_body, or tags. Only reference data explicitly listed above.

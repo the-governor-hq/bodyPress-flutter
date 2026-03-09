@@ -522,13 +522,13 @@ class BodyBlogService {
       case 'active':
         return '🏃';
       case 'cautious':
-        return '🌫️';
+        return '🫁';
       case 'rested':
         return '🧘';
       case 'quiet':
-        return '🌙';
+        return '💤';
       default:
-        return '🌿';
+        return '🫀';
     }
   }
 
