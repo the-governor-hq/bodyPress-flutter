@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -42,6 +43,12 @@ class _LiveSignalScreenState extends ConsumerState<LiveSignalScreen> {
   StreamSubscription<SignalSample>? _recordSub;
   bool _isRecording = false;
 
+  // Demo mode — synthetic signal without real hardware.
+  bool _isDemoMode = false;
+  Timer? _demoTimer;
+  final _demoSignalController = StreamController<SignalSample>.broadcast();
+  int _demoTick = 0;
+
   @override
   void initState() {
     super.initState();
@@ -66,6 +73,8 @@ class _LiveSignalScreenState extends ConsumerState<LiveSignalScreen> {
     _stateSub?.cancel();
     _devicesSub?.cancel();
     _recordSub?.cancel();
+    _stopDemo();
+    _demoSignalController.close();
     // Don't dispose the service — it's owned by the provider.
     super.dispose();
   }
@@ -116,6 +125,50 @@ class _LiveSignalScreenState extends ConsumerState<LiveSignalScreen> {
     setState(() => _isRecording = false);
   }
 
+  // ── Demo mode ───────────────────────────────────────────────────────
+
+  void _startDemo() {
+    _demoTick = 0;
+    final rng = Random();
+    final chCount = _provider!.channelCount;
+    final hz = _provider!.sampleRateHz;
+
+    // Emit synthetic samples at ~60 Hz (fast enough for smooth chart).
+    _demoTimer = Timer.periodic(Duration(milliseconds: (1000 / 60).round()), (
+      _,
+    ) {
+      _demoTick++;
+      final t = _demoTick / hz;
+      final channels = List<double>.generate(chCount, (ch) {
+        // Blend of frequencies — each channel gets a slightly different mix.
+        final base = 10.0 * sin(2 * pi * (3 + ch * 0.7) * t);
+        final alpha = 8.0 * sin(2 * pi * (10 + ch) * t) * (ch.isEven ? 1 : 0.6);
+        final noise = (rng.nextDouble() - 0.5) * 4;
+        return double.parse((base + alpha + noise).toStringAsFixed(2));
+      });
+      if (!_demoSignalController.isClosed) {
+        _demoSignalController.add(
+          SignalSample(time: DateTime.now(), channels: channels),
+        );
+      }
+    });
+    setState(() {
+      _isDemoMode = true;
+      _state = BleSourceState.streaming;
+    });
+  }
+
+  void _stopDemo() {
+    _demoTimer?.cancel();
+    _demoTimer = null;
+    if (_isDemoMode && mounted) {
+      setState(() {
+        _isDemoMode = false;
+        _state = BleSourceState.idle;
+      });
+    }
+  }
+
   // ── Build ─────────────────────────────────────────────────────────────
 
   @override
@@ -163,12 +216,31 @@ class _LiveSignalScreenState extends ConsumerState<LiveSignalScreen> {
             size: 20,
           ),
           onPressed: () {
+            if (_isDemoMode) _stopDemo();
             _disconnect();
             context.pop();
           },
         ),
         actions: [
-          if (_state == BleSourceState.streaming)
+          if (_isDemoMode)
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppTheme.aurora.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'DEMO',
+                style: GoogleFonts.robotoMono(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.aurora,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+          if (_state == BleSourceState.streaming && !_isDemoMode)
             IconButton(
               icon: Icon(
                 _isRecording
@@ -269,6 +341,8 @@ class _LiveSignalScreenState extends ConsumerState<LiveSignalScreen> {
                   ),
                   const SizedBox(height: 24),
                   _buildScanButton(),
+                  const SizedBox(height: 12),
+                  _buildDemoButton(),
                 ],
               ),
             ),
@@ -307,6 +381,28 @@ class _LiveSignalScreenState extends ConsumerState<LiveSignalScreen> {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppTheme.glow.withValues(alpha: 0.15),
           foregroundColor: AppTheme.glow,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDemoButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 48,
+      child: OutlinedButton.icon(
+        onPressed: _startDemo,
+        icon: const Icon(Icons.play_circle_outline_rounded, size: 18),
+        label: Text(
+          'Try demo mode',
+          style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppTheme.aurora,
+          side: BorderSide(color: AppTheme.aurora.withValues(alpha: 0.35)),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
@@ -384,11 +480,17 @@ class _LiveSignalScreenState extends ConsumerState<LiveSignalScreen> {
           // Live chart
           Expanded(
             child: LiveSignalChart(
-              signalStream: _service.signalStream,
+              signalStream: _isDemoMode
+                  ? _demoSignalController.stream
+                  : _service.signalStream,
               channelDescriptors: _provider!.channelDescriptors,
-              deviceName: _service.connectedDevice?.platformName,
-              sourceName: _provider!.displayName,
-              onDisconnect: _disconnect,
+              deviceName: _isDemoMode
+                  ? 'Demo'
+                  : _service.connectedDevice?.platformName,
+              sourceName: _isDemoMode
+                  ? '${_provider!.displayName} (Demo)'
+                  : _provider!.displayName,
+              onDisconnect: _isDemoMode ? _stopDemo : _disconnect,
             ),
           ),
         ],
@@ -424,6 +526,8 @@ class _LiveSignalScreenState extends ConsumerState<LiveSignalScreen> {
             ),
           const SizedBox(height: 24),
           _buildScanButton(),
+          const SizedBox(height: 12),
+          _buildDemoButton(),
         ],
       ),
     );
