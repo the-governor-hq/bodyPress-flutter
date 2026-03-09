@@ -39,7 +39,7 @@ class LocalDbService {
   static const _tableCaptures = 'captures';
   static const _tableVersions = 'body_blog_versions';
   static const _tableNutritionLogs = 'nutrition_logs';
-  static const _schemaVersion = 10;
+  static const _schemaVersion = 11;
 
   Database? _db;
 
@@ -106,7 +106,8 @@ class LocalDbService {
         battery_level    INTEGER,
         ai_metadata      TEXT,
         ble_hr_session   TEXT,
-        nutrition_data   TEXT
+        nutrition_data   TEXT,
+        signal_session   TEXT
       )
     ''');
     await db.execute('''
@@ -313,6 +314,16 @@ class LocalDbService {
         CREATE INDEX IF NOT EXISTS idx_nutrition_capture
         ON $_tableNutritionLogs(capture_id)
       ''');
+    }
+    if (oldVersion < 11) {
+      // v10 → v11: add signal_session column to captures
+      try {
+        await db.execute(
+          'ALTER TABLE $_tableCaptures ADD COLUMN signal_session TEXT',
+        );
+      } catch (e) {
+        if (!e.toString().toLowerCase().contains('duplicate column')) rethrow;
+      }
     }
   }
 

@@ -10,6 +10,8 @@ import '../../features/patterns/screens/patterns_screen.dart';
 import '../../features/sensors/screens/sensors_screen.dart';
 import '../../features/shell/app_shell.dart';
 import '../../features/shell/debug_screen.dart';
+import '../../features/sources/screens/live_signal_screen.dart';
+import '../../features/sources/screens/source_browser_screen.dart';
 
 class AppRouter {
   static late final GoRouter router;
@@ -165,6 +167,57 @@ class AppRouter {
                       child: child,
                     ),
           ),
+        ),
+
+        // ── Signal sources ──────────────────────────────────────────────
+        GoRoute(
+          path: '/sources',
+          name: 'sources',
+          pageBuilder: (context, state) => CustomTransitionPage(
+            key: state.pageKey,
+            child: const SourceBrowserScreen(),
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) =>
+                    SlideTransition(
+                      position:
+                          Tween<Offset>(
+                            begin: const Offset(1, 0),
+                            end: Offset.zero,
+                          ).animate(
+                            CurvedAnimation(
+                              parent: animation,
+                              curve: Curves.easeOutCubic,
+                            ),
+                          ),
+                      child: child,
+                    ),
+          ),
+        ),
+        GoRoute(
+          path: '/sources/:sourceId',
+          name: 'live-signal',
+          pageBuilder: (context, state) {
+            final sourceId = state.pathParameters['sourceId']!;
+            return CustomTransitionPage(
+              key: state.pageKey,
+              child: LiveSignalScreen(sourceId: sourceId),
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) =>
+                      SlideTransition(
+                        position:
+                            Tween<Offset>(
+                              begin: const Offset(1, 0),
+                              end: Offset.zero,
+                            ).animate(
+                              CurvedAnimation(
+                                parent: animation,
+                                curve: Curves.easeOutCubic,
+                              ),
+                            ),
+                        child: child,
+                      ),
+            );
+          },
         ),
       ],
     );

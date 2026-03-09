@@ -8,6 +8,7 @@ import 'ambient_scan_service.dart';
 import 'app_update_service.dart';
 import 'background_capture_service.dart';
 import 'ble_heart_rate_service.dart';
+import 'ble_source_provider.dart';
 import 'body_blog_service.dart';
 import 'body_dialogue_service.dart';
 import 'calendar_service.dart';
@@ -24,6 +25,7 @@ import 'notification_content_service.dart';
 import 'notification_service.dart';
 import 'nutrition_service.dart';
 import 'permission_service.dart';
+import 'sources/source_registry_init.dart';
 
 export '../models/ai_provider_config.dart'
     show AiProviderConfig, AiProviderType;
@@ -109,6 +111,22 @@ final permissionServiceProvider = Provider<PermissionService>(
 final appUpdateServiceProvider = Provider<AppUpdateService>(
   (_) => AppUpdateService(),
 );
+
+/// Central registry of all available BLE signal source providers.
+///
+/// Community sources register here at startup via [registerAllSources].
+final bleSourceRegistryProvider = Provider<BleSourceRegistry>((ref) {
+  final registry = BleSourceRegistry();
+  registerAllSources(registry);
+  return registry;
+});
+
+/// Reusable BLE connection management for any source provider.
+final bleSourceServiceProvider = Provider<BleSourceService>((ref) {
+  final svc = BleSourceService();
+  ref.onDispose(svc.dispose);
+  return svc;
+});
 
 /// [NotificationService] ships its own internal singleton; the provider just
 /// surfaces it so it can be injected / overridden in tests.
