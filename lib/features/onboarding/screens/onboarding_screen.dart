@@ -285,22 +285,31 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
                       icon: Icons.explore_outlined,
                       accent: const Color(0xFF6B8E6B),
                       title: 'Environmental\nAwareness',
-                      subtitle: 'LOCATION ACCESS',
+                      subtitle: 'LOCATION DATA DISCLOSURE',
                       body:
-                          'BodyPress uses your GPS coordinates to fetch local '
-                          'environmental data — weather conditions, air quality, '
-                          'UV index, and altitude.\n\n'
-                          'To do this, your coordinates are sent to our '
-                          'environmental data service in real time. '
-                          'They are not stored or linked to your identity.\n\n'
-                          'This helps you understand how your surroundings '
-                          'influence your body and overall wellness.',
+                          'This app collects your device\'s location data to '
+                          'provide environmental awareness features — including '
+                          'local weather conditions, air quality index, UV '
+                          'exposure, and altitude information.\n\n'
+                          'Your location coordinates are sent to our third-party '
+                          'environmental data service in real time to retrieve '
+                          'these conditions. This app also accesses location '
+                          'data in the background to enable automated '
+                          'environmental captures even when the app is closed '
+                          'or not in use.\n\n'
+                          'Location data is not stored on our servers, '
+                          'not linked to your identity, and not used for '
+                          'advertising or tracking purposes.',
                       privacy:
-                          'Your GPS coordinates are shared with our environmental '
-                          'data service solely to retrieve local conditions '
-                          '(weather, air quality, UV, altitude). '
-                          'They are not stored, tracked, or associated with '
-                          'your account.',
+                          'By tapping "Allow Location" below, you consent to '
+                          'the collection, use, and sharing of your location '
+                          'data as described above. Your GPS coordinates are '
+                          'shared with a third-party environmental data service '
+                          'solely to provide local conditions (weather, air '
+                          'quality, UV, altitude). They are not stored, tracked, '
+                          'or associated with your account. You can revoke this '
+                          'permission at any time in your device Settings.',
+                      privacyHeader: 'DATA DISCLOSURE & CONSENT',
                       ctaLabel: 'Allow Location',
                       onAllow: _requestLocation,
                       onSkip: _next,
@@ -548,6 +557,7 @@ class _PermissionStep extends StatelessWidget {
     required this.onSkip,
     required this.busy,
     required this.breathe,
+    this.privacyHeader,
   });
 
   final IconData icon;
@@ -556,6 +566,7 @@ class _PermissionStep extends StatelessWidget {
   final String subtitle;
   final String body;
   final String privacy;
+  final String? privacyHeader;
   final String ctaLabel;
   final VoidCallback onAllow;
   final VoidCallback onSkip;
@@ -628,7 +639,11 @@ class _PermissionStep extends StatelessWidget {
                 const SizedBox(height: 24),
 
                 // privacy note
-                _PrivacyNote(text: privacy, accent: accent),
+                _PrivacyNote(
+                  text: privacy,
+                  accent: accent,
+                  header: privacyHeader,
+                ),
 
                 const SizedBox(height: 20),
               ],
@@ -1707,12 +1722,13 @@ class _PillButton extends StatelessWidget {
   }
 }
 
-/// Block-quote-style privacy reassurance.
+/// Block-quote-style privacy reassurance / data disclosure.
 class _PrivacyNote extends StatelessWidget {
-  const _PrivacyNote({required this.text, required this.accent});
+  const _PrivacyNote({required this.text, required this.accent, this.header});
 
   final String text;
   final Color accent;
+  final String? header;
 
   @override
   Widget build(BuildContext context) {
@@ -1730,25 +1746,53 @@ class _PrivacyNote extends StatelessWidget {
           bottomRight: Radius.circular(8),
         ),
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            Icons.shield_outlined,
-            size: 16,
-            color: accent.withValues(alpha: 0.7),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: GoogleFonts.inter(
-                fontSize: 12.5,
-                height: 1.6,
-                fontWeight: FontWeight.w400,
-                color: dark ? Colors.white54 : Colors.black45,
-              ),
+          if (header != null) ...[
+            Row(
+              children: [
+                Icon(
+                  Icons.shield_outlined,
+                  size: 14,
+                  color: accent.withValues(alpha: 0.8),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  header!,
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.2,
+                    color: accent,
+                  ),
+                ),
+              ],
             ),
+            const SizedBox(height: 8),
+          ],
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (header == null)
+                Icon(
+                  Icons.shield_outlined,
+                  size: 16,
+                  color: accent.withValues(alpha: 0.7),
+                ),
+              if (header == null) const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  text,
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    height: 1.6,
+                    fontWeight: FontWeight.w400,
+                    color: dark ? Colors.white54 : Colors.black45,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
